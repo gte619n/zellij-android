@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:paddingStart="2dp"
+    android:paddingEnd="2dp">
+
+    <LinearLayout
+        android:id="@+id/tabItemRoot"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:minWidth="60dp"
+        android:background="?attr/selectableItemBackground">
+
+        <TextView
+            android:id="@+id/tabLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:maxWidth="120dp"
+            android:fontFamily="monospace" />
+
+    </LinearLayout>
+
+    <!-- Active indicator bar at bottom -->
+    <View
+        android:id="@+id/activeIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="bottom"
+        android:background="?attr/colorPrimary"
+        android:visibility="gone" />
+
+</FrameLayout>

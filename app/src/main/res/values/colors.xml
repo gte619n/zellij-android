@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tab_active_indicator">#FF6750A4</color>
+    <color name="error_banner_bg">#CC1B1B1B</color>
+    <color name="error_banner_text">#FFFFFFFF</color>
+</resources>

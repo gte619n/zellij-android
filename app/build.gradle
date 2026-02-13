@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Load local.properties for custom build config fields
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localProperties.load(new FileInputStream(localPropertiesFile))
+}
+
+android {
+    namespace 'com.zellijconnect.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.zellijconnect.app"
+        minSdk 35
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+
+        // Inject local.properties values into BuildConfig
+        buildConfigField "String", "ZELLIJ_BASE_URL",
+            "\"${localProperties.getProperty('ZELLIJ_BASE_URL', 'https://localhost:7600')}\""
+        buildConfigField "String", "ZELLIJ_GATEWAY_PATH",
+            "\"${localProperties.getProperty('ZELLIJ_GATEWAY_PATH', '/gateway')}\""
+        buildConfigField "String", "TERMINAL_IME_ID",
+            "\"${localProperties.getProperty('TERMINAL_IME_ID', 'juloo.keyboard2/.Keyboard2')}\""
+        buildConfigField "String", "DEFAULT_IME_ID",
+            "\"${localProperties.getProperty('DEFAULT_IME_ID', 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME')}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs << "-Xlint:deprecation"
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.activity:activity:1.10.0'
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="?android:attr/colorBackground">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/setup_title"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnBackground"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/setup_description"
+        android:textSize="16sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:layout_marginBottom="24dp"
+        android:lineSpacingExtra="4dp" />
+
+    <TextView
+        android:id="@+id/commandText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/setup_command"
+        android:fontFamily="monospace"
+        android:textSize="13sp"
+        android:background="?attr/colorSurfaceContainer"
+        android:padding="16dp"
+        android:textIsSelectable="true"
+        android:layout_marginBottom="32dp" />
+
+    <Button
+        android:id="@+id/btnSetupDone"
+        style="@style/Widget.Material3.Button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/setup_done"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/btnSetupSkip"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/setup_skip" />
+
+</LinearLayout>

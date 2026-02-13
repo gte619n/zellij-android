@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ZellijConnect</string>
+    <string name="notification_channel_name">Active Sessions</string>
+    <string name="notification_channel_description">Shows when terminal sessions are active</string>
+    <string name="tab_new">New Tab</string>
+    <string name="tab_close">Close Tab</string>
+    <string name="toggle_immersive">Toggle Fullscreen</string>
+    <string name="connection_lost">Connection lost. Retrying\u2026</string>
+    <string name="retry_now">Retry Now</string>
+    <string name="setup_title">One-Time Setup Required</string>
+    <string name="setup_description">ZellijConnect needs a special permission to switch keyboards automatically.\n\nConnect your phone to a computer via USB and run this command:</string>
+    <string name="setup_command">adb shell pm grant com.zellijconnect.app android.permission.WRITE_SECURE_SETTINGS</string>
+    <string name="setup_done">I\'ve Run the Command</string>
+    <string name="setup_skip">Skip (Manual Keyboard Switching)</string>
+</resources>
