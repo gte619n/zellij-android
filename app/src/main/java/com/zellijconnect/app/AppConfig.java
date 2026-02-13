@@ -24,6 +24,15 @@ public final class AppConfig {
         return BuildConfig.DEFAULT_IME_ID;
     }
 
+    public static String getZellijToken() {
+        return BuildConfig.ZELLIJ_TOKEN;
+    }
+
+    public static boolean hasToken() {
+        String token = getZellijToken();
+        return token != null && !token.isEmpty();
+    }
+
     public static String extractTabLabel(String url) {
         String baseUrl = getBaseUrl();
         if (url.startsWith(baseUrl)) {

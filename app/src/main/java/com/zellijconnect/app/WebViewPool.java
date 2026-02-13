@@ -138,6 +138,10 @@ public class WebViewPool {
                 super.onPageFinished(view, url);
                 // Inject clipboard bridge
                 view.evaluateJavascript(ClipboardBridge.getInjectionScript(), null);
+                // Auto-fill Zellij token if configured
+                if (AppConfig.hasToken()) {
+                    view.evaluateJavascript(getTokenAutofillScript(), null);
+                }
                 // Notify URL change for tab label updates
                 if (navigationCallback != null) navigationCallback.onUrlChanged(tabId, url);
             }
@@ -176,5 +180,40 @@ public class WebViewPool {
         webView.setLongClickable(false);
         webView.setOnLongClickListener(v -> true);
         webView.setHapticFeedbackEnabled(false);
+    }
+
+    private static String getTokenAutofillScript() {
+        String token = AppConfig.getZellijToken().replace("\\", "\\\\").replace("'", "\\'");
+        return "(function() {\n" +
+            "  if (window.__zellijTokenFilled) return;\n" +
+            "  var token = '" + token + "';\n" +
+            "  // Find password or text input fields (Zellij token form)\n" +
+            "  var inputs = document.querySelectorAll('input[type=\"password\"], input[type=\"text\"]');\n" +
+            "  if (inputs.length === 0) return;\n" +
+            "  for (var i = 0; i < inputs.length; i++) {\n" +
+            "    var input = inputs[i];\n" +
+            "    // Set value using native setter to trigger React/framework change events\n" +
+            "    var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;\n" +
+            "    nativeSetter.call(input, token);\n" +
+            "    input.dispatchEvent(new Event('input', { bubbles: true }));\n" +
+            "    input.dispatchEvent(new Event('change', { bubbles: true }));\n" +
+            "  }\n" +
+            "  // Try to find and click the submit button\n" +
+            "  var buttons = document.querySelectorAll('button[type=\"submit\"], button, input[type=\"submit\"]');\n" +
+            "  for (var j = 0; j < buttons.length; j++) {\n" +
+            "    var btn = buttons[j];\n" +
+            "    var text = (btn.textContent || btn.value || '').toLowerCase();\n" +
+            "    if (text.indexOf('connect') >= 0 || text.indexOf('submit') >= 0 || text.indexOf('login') >= 0 || text.indexOf('enter') >= 0 || text.indexOf('ok') >= 0) {\n" +
+            "      btn.click();\n" +
+            "      window.__zellijTokenFilled = true;\n" +
+            "      return;\n" +
+            "    }\n" +
+            "  }\n" +
+            "  // If no matching button text, click the first button\n" +
+            "  if (buttons.length > 0) {\n" +
+            "    buttons[0].click();\n" +
+            "    window.__zellijTokenFilled = true;\n" +
+            "  }\n" +
+            "})();";
     }
 }

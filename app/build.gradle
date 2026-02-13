@@ -29,6 +29,8 @@ android {
             "\"${localProperties.getProperty('TERMINAL_IME_ID', 'juloo.keyboard2/.Keyboard2')}\""
         buildConfigField "String", "DEFAULT_IME_ID",
             "\"${localProperties.getProperty('DEFAULT_IME_ID', 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME')}\""
+        buildConfigField "String", "ZELLIJ_TOKEN",
+            "\"${localProperties.getProperty('ZELLIJ_TOKEN', '')}\""
     }
 
     buildTypes {
