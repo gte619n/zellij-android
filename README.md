@@ -84,6 +84,46 @@ Then restart your Zellij sessions for the config to take effect.
 | **X on tab** | Detaches Zellij session and closes tab |
 | **Swipe up on tab** | Same as X button |
 
+## Clipboard Integration
+
+ZellijConnect supports bidirectional clipboard sync between Android and your Zellij sessions using OSC 52 escape sequences.
+
+### How it works
+
+- **Paste (Android → Terminal)**: Long-press in terminal → Paste, or use keyboard paste
+- **Copy (Terminal → Android)**: Terminal apps using OSC 52 will copy to Android clipboard
+
+### Server-side Configuration
+
+For clipboard sync from terminal to Android, Zellij must forward OSC 52 sequences. This is the default behavior, but ensure your config doesn't override it:
+
+```kdl
+# ~/.config/zellij/config.kdl
+
+# Leave copy_command unset to use OSC 52 (default)
+# copy_command "pbcopy"  # Don't set this for web client use
+
+copy_clipboard "system"
+copy_on_select true
+```
+
+### Testing OSC 52
+
+Test clipboard copy from terminal to Android:
+
+```bash
+# This should copy "hello" to your Android clipboard
+printf '\e]52;c;%s\a' "$(echo -n 'hello' | base64)"
+```
+
+### Supported Apps
+
+Apps that use OSC 52 will automatically sync to Android clipboard:
+- Neovim (with `set clipboard=unnamedplus`)
+- tmux (with `set -g set-clipboard on`)
+- vim-oscyank plugin
+- Most modern terminal apps with clipboard support
+
 ## Building
 
 Requirements:
