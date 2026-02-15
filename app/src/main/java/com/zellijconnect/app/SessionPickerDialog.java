@@ -37,6 +37,7 @@ public class SessionPickerDialog extends Dialog {
     private TextView emptyText;
     private EditText sessionNameInput;
     private LinearLayout tableHeader;
+    private View headerDivider;
     private SessionAdapter adapter;
 
     public SessionPickerDialog(@NonNull Context context, SessionPickerListener listener) {
@@ -55,6 +56,7 @@ public class SessionPickerDialog extends Dialog {
         emptyText = findViewById(R.id.emptyText);
         sessionNameInput = findViewById(R.id.sessionNameInput);
         tableHeader = findViewById(R.id.tableHeader);
+        headerDivider = findViewById(R.id.headerDivider);
         Button btnGateway = findViewById(R.id.btnGateway);
         Button btnCreate = findViewById(R.id.btnCreate);
         Button btnCancel = findViewById(R.id.btnCancel);
@@ -101,10 +103,12 @@ public class SessionPickerDialog extends Dialog {
             emptyText.setVisibility(View.VISIBLE);
             sessionList.setVisibility(View.GONE);
             tableHeader.setVisibility(View.GONE);
+            headerDivider.setVisibility(View.GONE);
         } else {
             emptyText.setVisibility(View.GONE);
             sessionList.setVisibility(View.VISIBLE);
             tableHeader.setVisibility(View.VISIBLE);
+            headerDivider.setVisibility(View.VISIBLE);
             adapter.notifyDataSetChanged();
         }
     }

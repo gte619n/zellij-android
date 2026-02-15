@@ -107,6 +107,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         webViewContainer = findViewById(R.id.webViewContainer);
         errorBanner = findViewById(R.id.errorBanner);
         connectingIndicator = findViewById(R.id.connectingIndicator);
+        connectingIndicator.setOnClickListener(v -> v.setVisibility(View.GONE));
         tabStrip = findViewById(R.id.tabStrip);
         Button btnRetry = findViewById(R.id.btnRetry);
         Button btnEscape = findViewById(R.id.btnEscape);
@@ -315,15 +316,15 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
             @Override
             public void onCreateSession(String sessionName) {
-                // Create a new named session via gateway
-                String sessionUrl = AppConfig.getBaseUrl() + "/session/" + sessionName + "?action=create";
+                // Create a new named session
+                String sessionUrl = AppConfig.getBaseUrl() + "/" + sessionName + "?action=create";
                 tabManager.addTab(sessionUrl);
             }
 
             @Override
             public void onAttachSession(String sessionName) {
                 // Attach to existing session
-                String sessionUrl = AppConfig.getBaseUrl() + "/session/" + sessionName;
+                String sessionUrl = AppConfig.getBaseUrl() + "/" + sessionName;
                 tabManager.addTab(sessionUrl);
             }
         });

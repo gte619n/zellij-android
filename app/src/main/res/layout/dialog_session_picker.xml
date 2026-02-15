@@ -3,27 +3,18 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:minWidth="480dp"
+    android:padding="20dp"
+    android:minWidth="520dp"
     android:background="?attr/colorSurface">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/session_picker_title"
-        android:textSize="20sp"
+        android:textSize="22sp"
         android:textStyle="bold"
         android:textColor="?attr/colorOnSurface"
-        android:layout_marginBottom="16dp" />
-
-    <!-- Gateway Button -->
-    <Button
-        android:id="@+id/btnGateway"
-        style="@style/Widget.Material3.Button.TonalButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="@string/open_gateway" />
+        android:layout_marginBottom="20dp" />
 
     <!-- Active Sessions Section -->
     <TextView
@@ -31,10 +22,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/active_sessions"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="?attr/colorOnSurfaceVariant"
-        android:layout_marginBottom="8dp" />
+        android:textSize="12sp"
+        android:textAllCaps="true"
+        android:letterSpacing="0.1"
+        android:textColor="?attr/colorPrimary"
+        android:layout_marginBottom="12dp" />
 
     <!-- Table Header -->
     <LinearLayout
@@ -42,27 +34,24 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingVertical="8dp"
-        android:paddingHorizontal="8dp"
-        android:background="?attr/colorSurfaceVariant"
+        android:paddingVertical="10dp"
+        android:paddingHorizontal="12dp"
         android:visibility="gone">
 
         <!-- Status column -->
-        <TextView
-            android:layout_width="36dp"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textSize="11sp"
-            android:textColor="?attr/colorOnSurfaceVariant" />
+        <View
+            android:layout_width="28dp"
+            android:layout_height="1dp" />
 
         <!-- Name column -->
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="2"
-            android:text="Session"
-            android:textSize="11sp"
-            android:textStyle="bold"
+            android:text="SESSION"
+            android:textSize="10sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.05"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <!-- Summary column -->
@@ -70,9 +59,10 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="3"
-            android:text="Activity"
-            android:textSize="11sp"
-            android:textStyle="bold"
+            android:text="ACTIVITY"
+            android:textSize="10sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.05"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <!-- Git column -->
@@ -80,20 +70,29 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="2"
-            android:text="Git"
-            android:textSize="11sp"
-            android:textStyle="bold"
+            android:text="BRANCH"
+            android:textSize="10sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.05"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
     </LinearLayout>
+
+    <!-- Divider under header -->
+    <View
+        android:id="@+id/headerDivider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?attr/colorOutlineVariant"
+        android:visibility="gone" />
 
     <ProgressBar
         android:id="@+id/progressBar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
         android:visibility="gone" />
 
     <TextView
@@ -103,40 +102,42 @@
         android:text="@string/no_sessions"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:gravity="center"
-        android:padding="12dp"
+        android:padding="16dp"
         android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/sessionList"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="300dp"
-        android:layout_marginBottom="16dp"
-        android:nestedScrollingEnabled="true" />
+        android:maxHeight="280dp"
+        android:layout_marginBottom="20dp"
+        android:nestedScrollingEnabled="true"
+        android:clipToPadding="false" />
 
     <!-- Divider -->
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="?attr/colorOutlineVariant"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="20dp" />
 
     <!-- New Session Input -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/create_named_session"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="?attr/colorOnSurfaceVariant"
-        android:layout_marginBottom="8dp" />
+        android:textSize="12sp"
+        android:textAllCaps="true"
+        android:letterSpacing="0.1"
+        android:textColor="?attr/colorPrimary"
+        android:layout_marginBottom="12dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        android:layout_marginBottom="24dp">
 
         <EditText
             android:id="@+id/sessionNameInput"
@@ -146,6 +147,7 @@
             android:hint="@string/session_name_hint"
             android:inputType="text"
             android:fontFamily="monospace"
+            android:textSize="14sp"
             android:imeOptions="actionGo" />
 
         <Button
@@ -153,16 +155,33 @@
             style="@style/Widget.Material3.Button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="12dp"
             android:text="@string/create" />
 
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btnCancel"
-        style="@style/Widget.Material3.Button.TextButton"
+    <!-- Bottom buttons row -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/cancel" />
+        android:orientation="horizontal"
+        android:gravity="end">
+
+        <Button
+            android:id="@+id/btnCancel"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/cancel" />
+
+        <Button
+            android:id="@+id/btnGateway"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/open_gateway" />
+
+    </LinearLayout>
 
 </LinearLayout>

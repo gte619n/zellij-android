@@ -5,18 +5,17 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingVertical="10dp"
-    android:paddingHorizontal="8dp"
+    android:paddingVertical="14dp"
+    android:paddingHorizontal="12dp"
     android:background="?attr/selectableItemBackground">
 
     <!-- Claude Status Icon -->
     <ImageView
         android:id="@+id/claudeStatusIcon"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:layout_marginEnd="12dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="8dp"
         android:src="@drawable/ic_claude_idle"
-        android:contentDescription="Claude status"
         tools:ignore="ContentDescription" />
 
     <!-- Session Name -->
@@ -25,13 +24,12 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="2"
-        android:textSize="14sp"
+        android:textSize="13sp"
         android:textColor="?attr/colorOnSurface"
-        android:textStyle="bold"
         android:fontFamily="monospace"
         android:maxLines="1"
         android:ellipsize="end"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="12dp"
         tools:text="my-session" />
 
     <!-- Activity/Summary -->
@@ -42,29 +40,30 @@
         android:layout_weight="3"
         android:textSize="12sp"
         android:textColor="?attr/colorOnSurfaceVariant"
-        android:maxLines="2"
+        android:maxLines="1"
         android:ellipsize="end"
-        android:layout_marginEnd="8dp"
-        tools:text="Working on feature implementation" />
+        android:layout_marginEnd="12dp"
+        tools:text="Working on feature" />
 
     <!-- Git Status -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="2"
-        android:orientation="vertical"
-        android:gravity="start">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <!-- Git Branch -->
         <TextView
             android:id="@+id/gitBranch"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:textSize="11sp"
             android:textColor="?attr/colorPrimary"
+            android:fontFamily="monospace"
             android:maxLines="1"
             android:ellipsize="middle"
-            android:drawablePadding="4dp"
             android:visibility="gone"
             tools:text="feature/branch"
             tools:visibility="visible" />
@@ -75,12 +74,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/merged"
-            android:textSize="10sp"
+            android:textSize="9sp"
             android:textColor="?attr/colorOnPrimaryContainer"
             android:background="@drawable/badge_merged"
             android:paddingHorizontal="6dp"
             android:paddingVertical="2dp"
-            android:layout_marginTop="2dp"
+            android:layout_marginStart="6dp"
             android:visibility="gone" />
 
     </LinearLayout>
