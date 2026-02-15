@@ -4,22 +4,72 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:padding="12dp"
+    android:paddingVertical="12dp"
+    android:paddingHorizontal="8dp"
     android:background="?attr/selectableItemBackground">
 
+    <!-- Status Indicator -->
     <View
-        android:layout_width="8dp"
-        android:layout_height="8dp"
+        android:id="@+id/statusIndicator"
+        android:layout_width="10dp"
+        android:layout_height="10dp"
         android:background="@drawable/session_indicator" />
 
-    <TextView
-        android:id="@+id/sessionName"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_marginStart="12dp"
-        android:textSize="16sp"
-        android:textColor="?attr/colorOnSurface"
-        android:fontFamily="monospace" />
+        android:orientation="vertical"
+        android:layout_marginStart="12dp">
+
+        <!-- Session Name -->
+        <TextView
+            android:id="@+id/sessionName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="15sp"
+            android:textColor="?attr/colorOnSurface"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- Status Text -->
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- Git Branch (optional) -->
+        <TextView
+            android:id="@+id/gitBranch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="?attr/colorPrimary"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- Merged indicator -->
+    <TextView
+        android:id="@+id/mergedBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/merged"
+        android:textSize="10sp"
+        android:textColor="?attr/colorOnPrimaryContainer"
+        android:background="@drawable/badge_merged"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="2dp"
+        android:visibility="gone" />
 
 </LinearLayout>

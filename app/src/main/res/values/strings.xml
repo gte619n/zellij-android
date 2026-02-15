@@ -19,6 +19,14 @@
     <string name="cancel">Cancel</string>
     <string name="session_name_hint">Session name</string>
     <string name="attach">Attach</string>
+    <string name="create">Create</string>
+    <string name="open_gateway">Open Gateway</string>
+    <string name="create_named_session">Create new session:</string>
+    <string name="active_sessions">Active Sessions</string>
+    <string name="merged">merged</string>
+    <string name="status_working">Working</string>
+    <string name="status_idle">Idle</string>
+    <string name="status_waiting">Waiting for input</string>
     <string name="open_browser">Open Browser</string>
     <string name="connecting">Connecting\u2026</string>
     <string name="escape_key">Escape</string>

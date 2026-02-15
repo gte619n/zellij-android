@@ -19,11 +19,21 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.net.Uri;
-import android.content.Intent;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
@@ -51,6 +61,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     private LinearLayout connectingIndicator;
     private RecyclerView tabStrip;
     private boolean isImmersive;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -154,7 +165,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
         // Button listeners
         btnEscape.setOnClickListener(v -> sendEscapeKey());
-        btnAddTab.setOnClickListener(v -> tabManager.addTab(AppConfig.getGatewayUrl()));
+        btnAddTab.setOnClickListener(v -> showSessionPicker());
         btnOpenBrowser.setOnClickListener(v -> openBrowser());
         btnToggleImmersive.setOnClickListener(v -> toggleImmersiveMode());
 
@@ -288,113 +299,76 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     private void showSessionPicker() {
         SessionPickerDialog dialog = new SessionPickerDialog(this, new SessionPickerDialog.SessionPickerListener() {
             @Override
-            public void onNewSession() {
+            public void onGateway() {
                 tabManager.addTab(AppConfig.getGatewayUrl());
             }
 
             @Override
-            public void onSessionSelected(String sessionName) {
-                // Connect to specific session
+            public void onCreateSession(String sessionName) {
+                // Create a new named session via gateway
+                String sessionUrl = AppConfig.getBaseUrl() + "/session/" + sessionName + "?action=create";
+                tabManager.addTab(sessionUrl);
+            }
+
+            @Override
+            public void onAttachSession(String sessionName) {
+                // Attach to existing session
                 String sessionUrl = AppConfig.getBaseUrl() + "/session/" + sessionName;
                 tabManager.addTab(sessionUrl);
             }
         });
         dialog.show();
 
-        // Fetch sessions using a hidden WebView
+        // Fetch sessions from the status API
         fetchSessions(dialog);
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     private void fetchSessions(SessionPickerDialog dialog) {
-        WebView fetchView = new WebView(this);
-        fetchView.getSettings().setJavaScriptEnabled(true);
-        fetchView.getSettings().setDomStorageEnabled(true);
+        executor.execute(() -> {
+            List<SessionInfo> sessions = new ArrayList<>();
+            try {
+                // Build API URL (same host as Zellij, port 7601)
+                Uri baseUri = Uri.parse(AppConfig.getBaseUrl());
+                String apiUrl = "http://" + baseUri.getHost() + ":7601/api/sessions";
 
-        fetchView.setWebViewClient(new android.webkit.WebViewClient() {
-            @Override
-            public void onReceivedSslError(WebView view, android.webkit.SslErrorHandler handler, android.net.http.SslError error) {
-                handler.proceed();
-            }
+                URL url = new URL(apiUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
 
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                // Try to extract session names from the page
-                // Look for links or elements containing session info
-                String extractScript =
-                    "(function() {" +
-                    "  var sessions = [];" +
-                    "  // Look for session links (common patterns)" +
-                    "  var links = document.querySelectorAll('a[href*=\"session\"], a[href*=\"attach\"]');" +
-                    "  links.forEach(function(link) {" +
-                    "    var name = link.textContent.trim();" +
-                    "    if (name && sessions.indexOf(name) === -1) sessions.push(name);" +
-                    "  });" +
-                    "  // Also look for list items or divs with session names" +
-                    "  var items = document.querySelectorAll('.session, .session-name, [data-session]');" +
-                    "  items.forEach(function(item) {" +
-                    "    var name = item.textContent.trim() || item.getAttribute('data-session');" +
-                    "    if (name && sessions.indexOf(name) === -1) sessions.push(name);" +
-                    "  });" +
-                    "  // Look for any element containing session-like names" +
-                    "  var allText = document.body.innerText;" +
-                    "  var matches = allText.match(/[a-z]+-[a-z]+-[a-z]+/gi);" +
-                    "  if (matches) {" +
-                    "    matches.forEach(function(m) {" +
-                    "      if (sessions.indexOf(m) === -1) sessions.push(m);" +
-                    "    });" +
-                    "  }" +
-                    "  return JSON.stringify(sessions);" +
-                    "})();";
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+                    reader.close();
 
-                view.evaluateJavascript(extractScript, result -> {
-                    runOnUiThread(() -> {
-                        try {
-                            if (result != null && !result.equals("null") && !result.equals("\"[]\"")) {
-                                String json = result.replace("\\\"", "\"");
-                                if (json.startsWith("\"")) json = json.substring(1);
-                                if (json.endsWith("\"")) json = json.substring(0, json.length() - 1);
+                    JSONObject json = new JSONObject(response.toString());
+                    JSONArray sessionArray = json.getJSONArray("sessions");
+                    for (int i = 0; i < sessionArray.length(); i++) {
+                        JSONObject sessionJson = sessionArray.getJSONObject(i);
+                        sessions.add(SessionInfo.fromJson(sessionJson));
+                    }
+                }
+                conn.disconnect();
 
-                                java.util.List<String> sessions = new java.util.ArrayList<>();
-                                // Simple JSON array parsing
-                                json = json.replace("[", "").replace("]", "").replace("\"", "");
-                                if (!json.isEmpty()) {
-                                    for (String s : json.split(",")) {
-                                        String trimmed = s.trim();
-                                        if (!trimmed.isEmpty()) {
-                                            sessions.add(trimmed);
-                                        }
-                                    }
-                                }
-                                dialog.setSessions(sessions);
-                            } else {
-                                dialog.setSessions(new java.util.ArrayList<>());
-                            }
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error parsing sessions", e);
-                            dialog.setSessions(new java.util.ArrayList<>());
-                        }
-                        view.destroy();
-                    });
+                final List<SessionInfo> finalSessions = sessions;
+                runOnUiThread(() -> dialog.setSessions(finalSessions));
+            } catch (Exception e) {
+                Log.e(TAG, "Error fetching sessions", e);
+                runOnUiThread(() -> {
+                    // Show empty list on error - user can still use Gateway or create new
+                    dialog.setSessions(new ArrayList<>());
                 });
             }
-
-            @Override
-            public void onReceivedError(WebView view, android.webkit.WebResourceRequest request, android.webkit.WebResourceError error) {
-                if (request.isForMainFrame()) {
-                    runOnUiThread(() -> {
-                        dialog.showError("Could not connect to server");
-                        view.destroy();
-                    });
-                }
-            }
         });
-
-        fetchView.loadUrl(AppConfig.getGatewayUrl());
     }
 
     private void closeTabWithDetach(String tabId, int position) {
@@ -568,6 +542,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     protected void onDestroy() {
         if (connectionMonitor != null) connectionMonitor.destroy();
         if (webViewPool != null) webViewPool.destroyAll();
+        executor.shutdown();
         KeepAliveService.stop(this);
         super.onDestroy();
     }
