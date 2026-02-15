@@ -13,4 +13,13 @@
     <string name="setup_command">adb shell pm grant com.zellijconnect.app android.permission.WRITE_SECURE_SETTINGS</string>
     <string name="setup_done">I\'ve Run the Command</string>
     <string name="setup_skip">Skip (Manual Keyboard Switching)</string>
+    <string name="session_picker_title">Select Session</string>
+    <string name="no_sessions">No active sessions found</string>
+    <string name="new_session">New Session</string>
+    <string name="cancel">Cancel</string>
+    <string name="session_name_hint">Session name</string>
+    <string name="attach">Attach</string>
+    <string name="open_browser">Open Browser</string>
+    <string name="connecting">Connecting\u2026</string>
+    <string name="escape_key">Escape</string>
 </resources>

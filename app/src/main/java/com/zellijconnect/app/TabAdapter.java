@@ -3,6 +3,7 @@ package com.zellijconnect.app;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -12,14 +13,20 @@ public class TabAdapter extends RecyclerView.Adapter<TabAdapter.ViewHolder> {
 
     private final TabManager tabManager;
     private final OnTabClickListener clickListener;
+    private final OnTabCloseListener closeListener;
 
     public interface OnTabClickListener {
         void onTabClick(int position);
     }
 
-    public TabAdapter(TabManager tabManager, OnTabClickListener clickListener) {
+    public interface OnTabCloseListener {
+        void onTabClose(int position, String tabId);
+    }
+
+    public TabAdapter(TabManager tabManager, OnTabClickListener clickListener, OnTabCloseListener closeListener) {
         this.tabManager = tabManager;
         this.clickListener = clickListener;
+        this.closeListener = closeListener;
     }
 
     @NonNull
@@ -50,6 +57,13 @@ public class TabAdapter extends RecyclerView.Adapter<TabAdapter.ViewHolder> {
                 clickListener.onTabClick(pos);
             }
         });
+
+        holder.closeButton.setOnClickListener(v -> {
+            int pos = holder.getBindingAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION && closeListener != null) {
+                closeListener.onTabClose(pos, tab.id);
+            }
+        });
     }
 
     @Override
@@ -60,11 +74,13 @@ public class TabAdapter extends RecyclerView.Adapter<TabAdapter.ViewHolder> {
     static class ViewHolder extends RecyclerView.ViewHolder {
         final TextView label;
         final View activeIndicator;
+        final ImageButton closeButton;
 
         ViewHolder(View itemView) {
             super(itemView);
             label = itemView.findViewById(R.id.tabLabel);
             activeIndicator = itemView.findViewById(R.id.activeIndicator);
+            closeButton = itemView.findViewById(R.id.btnCloseTab);
         }
     }
 }

@@ -23,8 +23,19 @@
             android:textSize="13sp"
             android:maxLines="1"
             android:ellipsize="end"
-            android:maxWidth="120dp"
+            android:maxWidth="100dp"
             android:fontFamily="monospace" />
+
+        <ImageButton
+            android:id="@+id/btnCloseTab"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="4dp"
+            android:src="@drawable/ic_close_tab"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/tab_close"
+            android:scaleType="centerInside"
+            android:padding="4dp" />
 
     </LinearLayout>
 

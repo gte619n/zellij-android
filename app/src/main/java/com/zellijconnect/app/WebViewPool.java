@@ -25,6 +25,8 @@ public class WebViewPool {
     private final Map<String, WebView> webViews = new HashMap<>();
     private ErrorCallback errorCallback;
     private NavigationCallback navigationCallback;
+    private LoadingCallback loadingCallback;
+    private LinkCallback linkCallback;
 
     public interface ErrorCallback {
         void onError(String tabId);
@@ -33,6 +35,15 @@ public class WebViewPool {
 
     public interface NavigationCallback {
         void onUrlChanged(String tabId, String newUrl);
+    }
+
+    public interface LoadingCallback {
+        void onLoadingStarted(String tabId);
+        void onLoadingFinished(String tabId);
+    }
+
+    public interface LinkCallback {
+        void onExternalLink(String url);
     }
 
     public WebViewPool(Context context) {
@@ -45,6 +56,14 @@ public class WebViewPool {
 
     public void setNavigationCallback(NavigationCallback callback) {
         this.navigationCallback = callback;
+    }
+
+    public void setLoadingCallback(LoadingCallback callback) {
+        this.loadingCallback = callback;
+    }
+
+    public void setLinkCallback(LinkCallback callback) {
+        this.linkCallback = callback;
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -131,11 +150,13 @@ public class WebViewPool {
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 if (errorCallback != null) errorCallback.onErrorCleared(tabId);
+                if (loadingCallback != null) loadingCallback.onLoadingStarted(tabId);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                if (loadingCallback != null) loadingCallback.onLoadingFinished(tabId);
                 // Inject clipboard bridge
                 view.evaluateJavascript(ClipboardBridge.getInjectionScript(), null);
                 // Auto-fill Zellij token if configured
@@ -151,6 +172,7 @@ public class WebViewPool {
                 super.onReceivedError(view, request, error);
                 if (request.isForMainFrame()) {
                     Log.e(TAG, "WebView error: " + error.getDescription());
+                    if (loadingCallback != null) loadingCallback.onLoadingFinished(tabId);
                     if (errorCallback != null) errorCallback.onError(tabId);
                 }
             }
@@ -165,21 +187,27 @@ public class WebViewPool {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // Keep all navigation within the WebView
+                // Keep Zellij navigation within the WebView
                 if (url.startsWith(AppConfig.getBaseUrl())) {
                     return false;
                 }
-                // Block external navigation
+                // Open external links in phone browser
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    if (linkCallback != null) {
+                        linkCallback.onExternalLink(url);
+                    }
+                    return true;
+                }
+                // Block other navigation
                 return true;
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient());
 
-        // Disable long-click context menu to avoid conflicts with terminal
-        webView.setLongClickable(false);
-        webView.setOnLongClickListener(v -> true);
-        webView.setHapticFeedbackEnabled(false);
+        // Enable text selection for copy/paste
+        webView.setLongClickable(true);
+        webView.setHapticFeedbackEnabled(true);
     }
 
     private static String getTokenAutofillScript() {

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.zellijconnect.session-status-server</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>SESSION_SERVER_SCRIPT_PATH</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SESSION_SERVER_PORT</key>
+        <string>7601</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/session-status-server.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/session-status-server.error.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>/tmp</string>
+</dict>
+</plist>
