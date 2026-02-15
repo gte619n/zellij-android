@@ -2,7 +2,6 @@ package com.zellijconnect.app;
 
 import android.app.Dialog;
 import android.content.Context;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,11 +10,12 @@ import android.view.Window;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -36,6 +36,7 @@ public class SessionPickerDialog extends Dialog {
     private ProgressBar progressBar;
     private TextView emptyText;
     private EditText sessionNameInput;
+    private LinearLayout tableHeader;
     private SessionAdapter adapter;
 
     public SessionPickerDialog(@NonNull Context context, SessionPickerListener listener) {
@@ -53,6 +54,7 @@ public class SessionPickerDialog extends Dialog {
         progressBar = findViewById(R.id.progressBar);
         emptyText = findViewById(R.id.emptyText);
         sessionNameInput = findViewById(R.id.sessionNameInput);
+        tableHeader = findViewById(R.id.tableHeader);
         Button btnGateway = findViewById(R.id.btnGateway);
         Button btnCreate = findViewById(R.id.btnCreate);
         Button btnCancel = findViewById(R.id.btnCancel);
@@ -98,9 +100,11 @@ public class SessionPickerDialog extends Dialog {
         if (sessions.isEmpty()) {
             emptyText.setVisibility(View.VISIBLE);
             sessionList.setVisibility(View.GONE);
+            tableHeader.setVisibility(View.GONE);
         } else {
             emptyText.setVisibility(View.GONE);
             sessionList.setVisibility(View.VISIBLE);
+            tableHeader.setVisibility(View.VISIBLE);
             adapter.notifyDataSetChanged();
         }
     }
@@ -138,29 +142,25 @@ public class SessionPickerDialog extends Dialog {
             // Session name
             holder.sessionName.setText(session.name);
 
-            // Status indicator color
-            int statusColor;
+            // Claude status icon
+            int iconRes;
             switch (session.claudeStatus) {
                 case "working":
-                    statusColor = 0xFF4CAF50; // Green
+                    iconRes = R.drawable.ic_claude_working;
                     break;
                 case "waiting":
-                    statusColor = 0xFFFF9800; // Orange
+                    iconRes = R.drawable.ic_claude_waiting;
+                    break;
+                case "done":
+                    iconRes = R.drawable.ic_claude_done;
                     break;
                 case "idle":
-                    statusColor = 0xFF9E9E9E; // Gray
-                    break;
                 default:
-                    statusColor = 0xFF757575; // Dark gray
+                    iconRes = R.drawable.ic_claude_idle;
             }
-            GradientDrawable indicator = (GradientDrawable) ContextCompat.getDrawable(ctx, R.drawable.session_indicator);
-            if (indicator != null) {
-                indicator = (GradientDrawable) indicator.mutate();
-                indicator.setColor(statusColor);
-                holder.statusIndicator.setBackground(indicator);
-            }
+            holder.claudeStatusIcon.setImageResource(iconRes);
 
-            // Status text
+            // Status text / activity summary
             String statusText = session.claudeActivity;
             if (statusText == null || statusText.isEmpty()) {
                 switch (session.claudeStatus) {
@@ -169,6 +169,9 @@ public class SessionPickerDialog extends Dialog {
                         break;
                     case "waiting":
                         statusText = ctx.getString(R.string.status_waiting);
+                        break;
+                    case "done":
+                        statusText = "Completed";
                         break;
                     case "idle":
                         statusText = ctx.getString(R.string.status_idle);
@@ -181,7 +184,7 @@ public class SessionPickerDialog extends Dialog {
 
             // Git branch
             if (session.gitBranch != null && !session.gitBranch.isEmpty()) {
-                holder.gitBranch.setText("⎇ " + session.gitBranch);
+                holder.gitBranch.setText(session.gitBranch);
                 holder.gitBranch.setVisibility(View.VISIBLE);
             } else {
                 holder.gitBranch.setVisibility(View.GONE);
@@ -207,7 +210,7 @@ public class SessionPickerDialog extends Dialog {
         }
 
         class ViewHolder extends RecyclerView.ViewHolder {
-            final View statusIndicator;
+            final ImageView claudeStatusIcon;
             final TextView sessionName;
             final TextView statusText;
             final TextView gitBranch;
@@ -215,7 +218,7 @@ public class SessionPickerDialog extends Dialog {
 
             ViewHolder(View itemView) {
                 super(itemView);
-                statusIndicator = itemView.findViewById(R.id.statusIndicator);
+                claudeStatusIcon = itemView.findViewById(R.id.claudeStatusIcon);
                 sessionName = itemView.findViewById(R.id.sessionName);
                 statusText = itemView.findViewById(R.id.statusText);
                 gitBranch = itemView.findViewById(R.id.gitBranch);

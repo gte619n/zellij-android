@@ -148,6 +148,13 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
             @Override
             public void onLoadingFinished(String tabId) {
+                // Page loaded but terminal may not be ready yet
+                // Keep indicator visible until onTerminalReady is called
+            }
+
+            @Override
+            public void onTerminalReady(String tabId) {
+                // Terminal has content and is ready for interaction
                 TabManager.Tab active = tabManager.getActiveTab();
                 if (active != null && active.id.equals(tabId)) {
                     connectingIndicator.setVisibility(View.GONE);
@@ -332,7 +339,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
             try {
                 // Build API URL (same host as Zellij, port 7601)
                 Uri baseUri = Uri.parse(AppConfig.getBaseUrl());
-                String apiUrl = "http://" + baseUri.getHost() + ":7601/api/sessions";
+                String apiUrl = "https://" + baseUri.getHost() + ":7601/api/sessions";
 
                 URL url = new URL(apiUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();

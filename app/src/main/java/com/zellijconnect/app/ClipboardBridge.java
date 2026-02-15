@@ -153,35 +153,31 @@ public class ClipboardBridge {
         "    window.WebSocket = function(url, protocols) {\n" +
         "      var ws = protocols ? new OrigWebSocket(url, protocols) : new OrigWebSocket(url);\n" +
         "      \n" +
-        "      var origOnMessage = null;\n" +
-        "      Object.defineProperty(ws, 'onmessage', {\n" +
-        "        get: function() { return origOnMessage; },\n" +
-        "        set: function(fn) {\n" +
-        "          origOnMessage = function(event) {\n" +
-        "            // Check for OSC 52 in the message\n" +
-        "            if (event.data && typeof event.data === 'string') {\n" +
-        "              checkForOsc52(event.data);\n" +
-        "            } else if (event.data instanceof ArrayBuffer) {\n" +
-        "              var text = new TextDecoder().decode(event.data);\n" +
-        "              checkForOsc52(text);\n" +
-        "            }\n" +
-        "            if (fn) fn.call(ws, event);\n" +
-        "          };\n" +
-        "        }\n" +
-        "      });\n" +
-        "      \n" +
+        "      // Use addEventListener instead of overriding onmessage\n" +
+        "      // This avoids breaking the WebSocket's internal message handling\n" +
         "      ws.addEventListener('message', function(event) {\n" +
-        "        if (event.data && typeof event.data === 'string') {\n" +
-        "          checkForOsc52(event.data);\n" +
-        "        } else if (event.data instanceof ArrayBuffer) {\n" +
-        "          var text = new TextDecoder().decode(event.data);\n" +
-        "          checkForOsc52(text);\n" +
+        "        try {\n" +
+        "          if (event.data && typeof event.data === 'string') {\n" +
+        "            checkForOsc52(event.data);\n" +
+        "          } else if (event.data instanceof ArrayBuffer) {\n" +
+        "            var text = new TextDecoder().decode(event.data);\n" +
+        "            checkForOsc52(text);\n" +
+        "          } else if (event.data instanceof Blob) {\n" +
+        "            event.data.text().then(function(text) {\n" +
+        "              checkForOsc52(text);\n" +
+        "            }).catch(function() {});\n" +
+        "          }\n" +
+        "        } catch(e) {\n" +
+        "          console.error('OSC 52 check error:', e);\n" +
         "        }\n" +
         "      });\n" +
         "      \n" +
         "      return ws;\n" +
         "    };\n" +
         "    window.WebSocket.prototype = OrigWebSocket.prototype;\n" +
+        "    Object.keys(OrigWebSocket).forEach(function(key) {\n" +
+        "      try { window.WebSocket[key] = OrigWebSocket[key]; } catch(e) {}\n" +
+        "    });\n" +
         "    console.log('WebSocket hooked for OSC 52 detection');\n" +
         "  }\n" +
         "  \n" +

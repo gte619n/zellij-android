@@ -1,75 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingVertical="12dp"
+    android:paddingVertical="10dp"
     android:paddingHorizontal="8dp"
     android:background="?attr/selectableItemBackground">
 
-    <!-- Status Indicator -->
-    <View
-        android:id="@+id/statusIndicator"
-        android:layout_width="10dp"
-        android:layout_height="10dp"
-        android:background="@drawable/session_indicator" />
+    <!-- Claude Status Icon -->
+    <ImageView
+        android:id="@+id/claudeStatusIcon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="12dp"
+        android:src="@drawable/ic_claude_idle"
+        android:contentDescription="Claude status"
+        tools:ignore="ContentDescription" />
 
+    <!-- Session Name -->
+    <TextView
+        android:id="@+id/sessionName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:textSize="14sp"
+        android:textColor="?attr/colorOnSurface"
+        android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginEnd="8dp"
+        tools:text="my-session" />
+
+    <!-- Activity/Summary -->
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="3"
+        android:textSize="12sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:layout_marginEnd="8dp"
+        tools:text="Working on feature implementation" />
+
+    <!-- Git Status -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
+        android:layout_weight="2"
         android:orientation="vertical"
-        android:layout_marginStart="12dp">
+        android:gravity="start">
 
-        <!-- Session Name -->
-        <TextView
-            android:id="@+id/sessionName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="15sp"
-            android:textColor="?attr/colorOnSurface"
-            android:textStyle="bold"
-            android:fontFamily="monospace"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <!-- Status Text -->
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:layout_marginTop="2dp"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <!-- Git Branch (optional) -->
+        <!-- Git Branch -->
         <TextView
             android:id="@+id/gitBranch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="11sp"
             android:textColor="?attr/colorPrimary"
-            android:layout_marginTop="2dp"
             android:maxLines="1"
-            android:ellipsize="end"
+            android:ellipsize="middle"
+            android:drawablePadding="4dp"
+            android:visibility="gone"
+            tools:text="feature/branch"
+            tools:visibility="visible" />
+
+        <!-- Merged badge -->
+        <TextView
+            android:id="@+id/mergedBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/merged"
+            android:textSize="10sp"
+            android:textColor="?attr/colorOnPrimaryContainer"
+            android:background="@drawable/badge_merged"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:layout_marginTop="2dp"
             android:visibility="gone" />
 
     </LinearLayout>
 
-    <!-- Merged indicator -->
-    <TextView
-        android:id="@+id/mergedBadge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/merged"
-        android:textSize="10sp"
-        android:textColor="?attr/colorOnPrimaryContainer"
-        android:background="@drawable/badge_merged"
-        android:paddingHorizontal="6dp"
-        android:paddingVertical="2dp"
+    <!-- Hidden: old status indicator (kept for compatibility) -->
+    <View
+        android:id="@+id/statusIndicator"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:visibility="gone" />
 
 </LinearLayout>

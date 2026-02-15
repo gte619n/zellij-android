@@ -28,6 +28,25 @@ public class WebViewPool {
     private LoadingCallback loadingCallback;
     private LinkCallback linkCallback;
 
+    // JavaScript interface for terminal readiness callback
+    public class TerminalReadyBridge {
+        private final String tabId;
+
+        TerminalReadyBridge(String tabId) {
+            this.tabId = tabId;
+        }
+
+        @android.webkit.JavascriptInterface
+        public void onReady() {
+            android.os.Handler mainHandler = new android.os.Handler(context.getMainLooper());
+            mainHandler.post(() -> {
+                if (loadingCallback != null) {
+                    loadingCallback.onTerminalReady(tabId);
+                }
+            });
+        }
+    }
+
     public interface ErrorCallback {
         void onError(String tabId);
         void onErrorCleared(String tabId);
@@ -40,6 +59,7 @@ public class WebViewPool {
     public interface LoadingCallback {
         void onLoadingStarted(String tabId);
         void onLoadingFinished(String tabId);
+        void onTerminalReady(String tabId);
     }
 
     public interface LinkCallback {
@@ -48,6 +68,8 @@ public class WebViewPool {
 
     public WebViewPool(Context context) {
         this.context = context;
+        // Enable remote debugging via chrome://inspect
+        WebView.setWebContentsDebuggingEnabled(true);
     }
 
     public void setErrorCallback(ErrorCallback callback) {
@@ -70,6 +92,8 @@ public class WebViewPool {
     public WebView getOrCreate(String tabId, String url) {
         WebView existing = webViews.get(tabId);
         if (existing != null) {
+            // Ensure JavaScript interfaces are attached (might be missing on old WebViews)
+            existing.addJavascriptInterface(new TerminalReadyBridge(tabId), "ZellijTerminalReady");
             return existing;
         }
 
@@ -78,6 +102,7 @@ public class WebViewPool {
         webViews.put(tabId, webView);
 
         webView.addJavascriptInterface(new ClipboardBridge(context), "ZellijClipboard");
+        webView.addJavascriptInterface(new TerminalReadyBridge(tabId), "ZellijTerminalReady");
         webView.loadUrl(url);
 
         return webView;
@@ -163,6 +188,11 @@ public class WebViewPool {
                 if (AppConfig.hasToken()) {
                     view.evaluateJavascript(getTokenAutofillScript(), null);
                 }
+                // Inject terminal readiness checker after a short delay
+                // to avoid interfering with page initialization
+                view.postDelayed(() -> {
+                    view.evaluateJavascript(getTerminalReadyScript(), null);
+                }, 1000);
                 // Notify URL change for tab label updates
                 if (navigationCallback != null) navigationCallback.onUrlChanged(tabId, url);
             }
@@ -242,6 +272,83 @@ public class WebViewPool {
             "    buttons[0].click();\n" +
             "    window.__zellijTokenFilled = true;\n" +
             "  }\n" +
+            "})();";
+    }
+
+    private static String getTerminalReadyScript() {
+        return "(function() {\n" +
+            "  if (window.__zellijReadyCheckerInstalled) return;\n" +
+            "  window.__zellijReadyCheckerInstalled = true;\n" +
+            "\n" +
+            "  function notifyReady() {\n" +
+            "    if (typeof ZellijTerminalReady !== 'undefined' && ZellijTerminalReady.onReady) {\n" +
+            "      try {\n" +
+            "        ZellijTerminalReady.onReady();\n" +
+            "      } catch(e) {\n" +
+            "        console.error('ZellijConnect: Failed to notify ready', e);\n" +
+            "      }\n" +
+            "    } else {\n" +
+            "      console.log('ZellijConnect: ZellijTerminalReady not available');\n" +
+            "    }\n" +
+            "  }\n" +
+            "\n" +
+            "  function isTerminalReady() {\n" +
+            "    // Check for xterm.js terminal element\n" +
+            "    var xtermScreen = document.querySelector('.xterm-screen');\n" +
+            "    var xtermRows = document.querySelector('.xterm-rows');\n" +
+            "    \n" +
+            "    // Terminal exists if we have the screen element\n" +
+            "    if (xtermScreen && xtermRows) {\n" +
+            "      console.log('ZellijConnect: xterm elements found');\n" +
+            "      return true;\n" +
+            "    }\n" +
+            "\n" +
+            "    // Also check for canvas-based terminal\n" +
+            "    var canvas = document.querySelector('.xterm canvas');\n" +
+            "    if (canvas) {\n" +
+            "      console.log('ZellijConnect: xterm canvas found');\n" +
+            "      return true;\n" +
+            "    }\n" +
+            "\n" +
+            "    return false;\n" +
+            "  }\n" +
+            "\n" +
+            "  function checkReady() {\n" +
+            "    if (isTerminalReady()) {\n" +
+            "      console.log('ZellijConnect: Terminal is ready');\n" +
+            "      notifyReady();\n" +
+            "      return true;\n" +
+            "    }\n" +
+            "    return false;\n" +
+            "  }\n" +
+            "\n" +
+            "  // Check immediately\n" +
+            "  if (checkReady()) return;\n" +
+            "\n" +
+            "  // Poll for readiness\n" +
+            "  var attempts = 0;\n" +
+            "  var maxAttempts = 60; // 30 seconds max\n" +
+            "  var interval = setInterval(function() {\n" +
+            "    attempts++;\n" +
+            "    if (checkReady() || attempts >= maxAttempts) {\n" +
+            "      clearInterval(interval);\n" +
+            "      if (attempts >= maxAttempts) {\n" +
+            "        console.log('ZellijConnect: Terminal ready check timed out');\n" +
+            "        notifyReady();\n" +
+            "      }\n" +
+            "    }\n" +
+            "  }, 500);\n" +
+            "\n" +
+            "  // Also watch for DOM changes\n" +
+            "  var observer = new MutationObserver(function() {\n" +
+            "    if (checkReady()) {\n" +
+            "      observer.disconnect();\n" +
+            "      clearInterval(interval);\n" +
+            "    }\n" +
+            "  });\n" +
+            "  observer.observe(document.body, { childList: true, subtree: true });\n" +
+            "\n" +
+            "  console.log('ZellijConnect: Terminal ready checker installed');\n" +
             "})();";
     }
 }
