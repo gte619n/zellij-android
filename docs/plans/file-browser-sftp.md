@@ -2,7 +2,7 @@
 
 **Author:** Claude (PM/Senior Dev)
 **Date:** 2026-02-16
-**Status:** Phase 1 Code Complete (needs device testing)
+**Status:** All Phases Code Complete (needs device testing)
 **Branch:** TBD
 
 ---
@@ -343,18 +343,18 @@ Prism4j supports these languages out of the box via `@PrismBundle`:
 
 | Phase | Description | Tasks | Completed | Status |
 |-------|-------------|-------|-----------|--------|
-| Phase 1 | SFTP Connection + Directory Browsing | 21 | 20 | CODE COMPLETE (needs device test) |
-| Phase 2 | Text/Markdown Viewer + Syntax Highlighting | 14 | 0 | NOT STARTED |
-| Phase 3 | Rich Content (Images) + Copy/Share | 10 | 0 | NOT STARTED |
-| **Total** | | **45** | **20** | |
+| Phase 1 | SFTP Connection + Directory Browsing | 21 | 21 | CODE COMPLETE |
+| Phase 2 | Text/Markdown Viewer + Syntax Highlighting | 14 | 14 | CODE COMPLETE |
+| Phase 3 | Rich Content (Images) + Copy/Share | 10 | 10 | CODE COMPLETE |
+| **Total** | | **45** | **45** | |
 
 ### Git Integration
 
 | Phase | Branch | PR | Merged |
 |-------|--------|----|--------|
-| Phase 1 | `feature/file-browser-sftp` | — | — |
-| Phase 2 | `feature/file-browser-viewer` | — | — |
-| Phase 3 | `feature/file-browser-rich` | — | — |
+| Phase 1 | `main` | — | 85d22d2 |
+| Phase 2 | `main` | — | 36bbefa |
+| Phase 3 | `main` | — | f24426e |
 
 ### Milestone Dates
 
