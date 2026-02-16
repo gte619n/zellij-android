@@ -29,10 +29,14 @@ public class SftpFileEntry implements Comparable<SftpFileEntry> {
 
     public String getHumanSize() {
         if (isDirectory) return "";
-        if (size < 1024) return size + " B";
-        if (size < 1024 * 1024) return String.format(Locale.US, "%.1f KB", size / 1024.0);
-        if (size < 1024 * 1024 * 1024) return String.format(Locale.US, "%.1f MB", size / (1024.0 * 1024));
-        return String.format(Locale.US, "%.1f GB", size / (1024.0 * 1024 * 1024));
+        return humanReadableSize(size);
+    }
+
+    public static String humanReadableSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format(Locale.US, "%.1f KB", bytes / 1024.0);
+        if (bytes < 1024 * 1024 * 1024) return String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024));
+        return String.format(Locale.US, "%.1f GB", bytes / (1024.0 * 1024 * 1024));
     }
 
     public String getFormattedDate() {

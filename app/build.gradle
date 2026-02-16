@@ -58,6 +58,10 @@ android {
     }
 }
 
+configurations.configureEach {
+    exclude group: 'org.jetbrains', module: 'annotations-java5'
+}
+
 dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation 'androidx.appcompat:appcompat:1.7.0'
@@ -68,4 +72,14 @@ dependencies {
 
     // SFTP file browser
     implementation 'com.github.mwiede:jsch:0.2.21'
+
+    // Markdown rendering + syntax highlighting
+    def markwonVersion = '4.6.2'
+    implementation "io.noties.markwon:core:$markwonVersion"
+    implementation "io.noties.markwon:ext-strikethrough:$markwonVersion"
+    implementation "io.noties.markwon:ext-tables:$markwonVersion"
+    implementation "io.noties.markwon:ext-tasklist:$markwonVersion"
+    implementation "io.noties.markwon:syntax-highlight:$markwonVersion"
+    implementation 'io.noties:prism4j:2.0.0'
+    annotationProcessor 'io.noties:prism4j-bundler:2.0.0'
 }

@@ -72,4 +72,10 @@
     <string name="reload">Reload</string>
     <string name="toggle_hidden_files">Toggle Hidden Files</string>
     <string name="no_session_for_browser">Open a terminal session first to use the file browser</string>
+
+    <!-- File Viewer -->
+    <string name="back">Back</string>
+    <string name="load_more">Load more\u2026</string>
+    <string name="binary_file">Binary file (%1$s)</string>
+    <string name="lines_truncated">Showing first %1$d of %2$d lines</string>
 </resources>

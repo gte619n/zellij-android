@@ -7,12 +7,13 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -20,13 +21,15 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
 
 /**
- * Compound view for browsing remote directories via SFTP.
- * Contains breadcrumb bar, directory listing, and hidden-files toggle.
+ * Compound view for browsing remote directories via SFTP and viewing files.
+ * Contains breadcrumb bar, directory listing, hidden-files toggle, and file viewer.
  */
-public class FileBrowserView extends LinearLayout {
+public class FileBrowserView extends FrameLayout {
 
     private static final String TAG = "ZellijConnect";
 
+    // Directory mode views
+    private LinearLayout directoryContainer;
     private LinearLayout breadcrumbContainer;
     private HorizontalScrollView breadcrumbScroll;
     private RecyclerView fileList;
@@ -37,11 +40,16 @@ public class FileBrowserView extends LinearLayout {
     private ImageButton btnToggleHidden;
     private ImageButton btnReload;
 
+    // File viewer
+    private FrameLayout fileViewerContainer;
+    private FileViewerView fileViewerView;
+
     private FileBrowserAdapter adapter;
     private SftpManager sftpManager;
     private String currentPath;
     private String host;
     private int port;
+    private boolean viewingFile;
     private Parcelable pendingScrollState;
 
     public FileBrowserView(Context context) {
@@ -57,6 +65,7 @@ public class FileBrowserView extends LinearLayout {
     private void init(Context context) {
         LayoutInflater.from(context).inflate(R.layout.view_file_browser, this, true);
 
+        directoryContainer = findViewById(R.id.directoryContainer);
         breadcrumbContainer = findViewById(R.id.breadcrumbContainer);
         breadcrumbScroll = (HorizontalScrollView) breadcrumbContainer.getParent();
         fileList = findViewById(R.id.fileList);
@@ -65,12 +74,14 @@ public class FileBrowserView extends LinearLayout {
         emptyText = findViewById(R.id.emptyText);
         btnToggleHidden = findViewById(R.id.btnToggleHidden);
         btnReload = findViewById(R.id.btnReload);
+        fileViewerContainer = findViewById(R.id.fileViewerContainer);
 
         adapter = new FileBrowserAdapter(entry -> {
             if (entry.isDirectory) {
                 navigateTo(entry.path);
+            } else {
+                openFile(entry.path, entry.name);
             }
-            // File viewing will be added in Phase 2
         });
 
         layoutManager = new LinearLayoutManager(context);
@@ -97,24 +108,82 @@ public class FileBrowserView extends LinearLayout {
     }
 
     /**
-     * Navigate to a directory and load its contents (resets scroll to top).
+     * Navigate to a directory and load its contents.
      */
     public void navigateTo(String path) {
         this.currentPath = path;
-        this.pendingScrollState = null; // New directory: scroll to top
+        this.viewingFile = false;
+        this.pendingScrollState = null;
+        showDirectoryMode();
         updateBreadcrumb(path);
         loadDirectory(path);
+    }
+
+    /**
+     * Open a file for viewing.
+     */
+    private void openFile(String path, String fileName) {
+        // Save directory scroll position before switching to file view
+        pendingScrollState = layoutManager.onSaveInstanceState();
+        viewingFile = true;
+
+        if (fileViewerView == null) {
+            fileViewerView = new FileViewerView(getContext());
+            fileViewerView.setup(sftpManager, host, port);
+            fileViewerView.setOnBackListener(this::closeFileViewer);
+            fileViewerContainer.addView(fileViewerView,
+                new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                ));
+        }
+
+        showFileMode();
+        fileViewerView.viewFile(path, fileName);
+    }
+
+    /**
+     * Close the file viewer and return to directory listing.
+     */
+    private void closeFileViewer() {
+        viewingFile = false;
+        showDirectoryMode();
+        // Restore directory scroll position
+        if (pendingScrollState != null) {
+            layoutManager.onRestoreInstanceState(pendingScrollState);
+            pendingScrollState = null;
+        }
+    }
+
+    private void showDirectoryMode() {
+        directoryContainer.setVisibility(View.VISIBLE);
+        fileViewerContainer.setVisibility(View.GONE);
+    }
+
+    private void showFileMode() {
+        directoryContainer.setVisibility(View.GONE);
+        fileViewerContainer.setVisibility(View.VISIBLE);
     }
 
     /**
      * Refresh the current directory listing, preserving scroll position.
      */
     public void refresh() {
+        if (viewingFile) {
+            if (fileViewerView != null) fileViewerView.reload();
+            return;
+        }
         if (currentPath != null) {
-            // Save scroll position before reloading
             pendingScrollState = layoutManager.onSaveInstanceState();
             loadDirectory(currentPath);
         }
+    }
+
+    /**
+     * Whether we're currently viewing a file (not directory listing).
+     */
+    public boolean isViewingFile() {
+        return viewingFile;
     }
 
     public String getCurrentPath() {
@@ -133,11 +202,9 @@ public class FileBrowserView extends LinearLayout {
                     showList();
                     adapter.setEntries(entries);
                     if (pendingScrollState != null) {
-                        // Restore saved scroll position (refresh case)
                         layoutManager.onRestoreInstanceState(pendingScrollState);
                         pendingScrollState = null;
                     } else {
-                        // New directory navigation: scroll to top
                         fileList.scrollToPosition(0);
                     }
                 }
@@ -237,10 +304,17 @@ public class FileBrowserView extends LinearLayout {
     }
 
     /**
-     * Handle back navigation - go up one directory.
-     * Returns true if handled, false if already at root.
+     * Handle back navigation.
+     * Returns true if handled, false if already at root directory.
      */
     public boolean navigateUp() {
+        // If viewing a file, go back to directory listing
+        if (viewingFile) {
+            closeFileViewer();
+            return true;
+        }
+
+        // Navigate up one directory
         if (currentPath == null || "/".equals(currentPath)) {
             return false;
         }
