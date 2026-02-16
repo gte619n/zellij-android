@@ -185,8 +185,8 @@ public class WebViewPool {
                 // Inject clipboard bridge
                 view.evaluateJavascript(ClipboardBridge.getInjectionScript(), null);
                 // Auto-fill Zellij token if configured
-                if (AppConfig.hasToken()) {
-                    view.evaluateJavascript(getTokenAutofillScript(), null);
+                if (AppConfig.hasToken(context)) {
+                    view.evaluateJavascript(getTokenAutofillScript(context), null);
                 }
                 // Inject terminal readiness checker after a short delay
                 // to avoid interfering with page initialization
@@ -218,7 +218,7 @@ public class WebViewPool {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 // Keep Zellij navigation within the WebView
-                if (url.startsWith(AppConfig.getBaseUrl())) {
+                if (url.startsWith(AppConfig.getBaseUrl(context))) {
                     return false;
                 }
                 // Open external links in phone browser
@@ -240,8 +240,8 @@ public class WebViewPool {
         webView.setHapticFeedbackEnabled(true);
     }
 
-    private static String getTokenAutofillScript() {
-        String token = AppConfig.getZellijToken().replace("\\", "\\\\").replace("'", "\\'");
+    private static String getTokenAutofillScript(Context ctx) {
+        String token = AppConfig.getZellijToken(ctx).replace("\\", "\\\\").replace("'", "\\'");
         return "(function() {\n" +
             "  if (window.__zellijTokenFilled) return;\n" +
             "  var token = '" + token + "';\n" +

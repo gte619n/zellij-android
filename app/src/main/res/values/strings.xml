@@ -30,4 +30,24 @@
     <string name="open_browser">Open Browser</string>
     <string name="connecting">Connecting\u2026</string>
     <string name="escape_key">Escape</string>
+
+    <!-- Settings -->
+    <string name="settings">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="server_section">Server Configuration</string>
+    <string name="zellij_url">Zellij Server URL</string>
+    <string name="metadata_port">Metadata Server Port</string>
+    <string name="auth_token">Auth Token</string>
+    <string name="keyboard_section">Keyboard Selection</string>
+    <string name="terminal_keyboard">Terminal Keyboard</string>
+    <string name="default_keyboard">Default Keyboard</string>
+    <string name="ssh_section">SSH Keys</string>
+    <string name="generate_ssh_key">Generate SSH Key</string>
+    <string name="copy_public_key">Copy Public Key</string>
+    <string name="ssh_key_generated">SSH key generated</string>
+    <string name="no_ssh_key">No SSH key generated yet</string>
+    <string name="ssh_key_copied">Public key copied to clipboard</string>
+    <string name="save">Save</string>
+    <string name="about_section">About</string>
+    <string name="app_version">Version %s</string>
 </resources>

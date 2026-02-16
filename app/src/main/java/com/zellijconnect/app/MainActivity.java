@@ -113,6 +113,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         Button btnEscape = findViewById(R.id.btnEscape);
         ImageButton btnAddTab = findViewById(R.id.btnAddTab);
         ImageButton btnOpenBrowser = findViewById(R.id.btnOpenBrowser);
+        ImageButton btnSettings = findViewById(R.id.btnSettings);
         ImageButton btnToggleImmersive = findViewById(R.id.btnToggleImmersive);
 
         // Init managers
@@ -175,6 +176,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         btnEscape.setOnClickListener(v -> sendEscapeKey());
         btnAddTab.setOnClickListener(v -> showSessionPicker());
         btnOpenBrowser.setOnClickListener(v -> openBrowser());
+        btnSettings.setOnClickListener(v -> showSettings());
         btnToggleImmersive.setOnClickListener(v -> toggleImmersiveMode());
 
         // Restore immersive mode preference
@@ -296,7 +298,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
     private void openBrowser() {
         // Open browser at same host but port 5173
-        String baseUrl = AppConfig.getBaseUrl();
+        String baseUrl = AppConfig.getBaseUrl(this);
         try {
             Uri uri = Uri.parse(baseUrl);
             String browserUrl = uri.getScheme() + "://" + uri.getHost() + ":5173";
@@ -307,24 +309,35 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         }
     }
 
+    private void showSettings() {
+        SettingsDialog dialog = new SettingsDialog(this, () -> {
+            // Update IME manager with new keyboard IDs
+            imeSwitchManager.updateImeIds(
+                AppConfig.getTerminalImeId(this),
+                AppConfig.getDefaultImeId(this)
+            );
+        });
+        dialog.show();
+    }
+
     private void showSessionPicker() {
         SessionPickerDialog dialog = new SessionPickerDialog(this, new SessionPickerDialog.SessionPickerListener() {
             @Override
             public void onGateway() {
-                tabManager.addTab(AppConfig.getGatewayUrl());
+                tabManager.addTab(AppConfig.getGatewayUrl(MainActivity.this));
             }
 
             @Override
             public void onCreateSession(String sessionName) {
                 // Create a new named session
-                String sessionUrl = AppConfig.getBaseUrl() + "/" + sessionName + "?action=create";
+                String sessionUrl = AppConfig.getBaseUrl(MainActivity.this) + "/" + sessionName + "?action=create";
                 tabManager.addTab(sessionUrl);
             }
 
             @Override
             public void onAttachSession(String sessionName) {
                 // Attach to existing session
-                String sessionUrl = AppConfig.getBaseUrl() + "/" + sessionName;
+                String sessionUrl = AppConfig.getBaseUrl(MainActivity.this) + "/" + sessionName;
                 tabManager.addTab(sessionUrl);
             }
         });
@@ -338,9 +351,10 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         executor.execute(() -> {
             List<SessionInfo> sessions = new ArrayList<>();
             try {
-                // Build API URL (same host as Zellij, port 7601)
-                Uri baseUri = Uri.parse(AppConfig.getBaseUrl());
-                String apiUrl = "https://" + baseUri.getHost() + ":7601/api/sessions";
+                // Build API URL (same host as Zellij, configurable port) - HTTPS via Tailscale
+                Uri baseUri = Uri.parse(AppConfig.getBaseUrl(MainActivity.this));
+                int metadataPort = AppConfig.getMetadataPort(MainActivity.this);
+                String apiUrl = "https://" + baseUri.getHost() + ":" + metadataPort + "/api/sessions";
 
                 URL url = new URL(apiUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();

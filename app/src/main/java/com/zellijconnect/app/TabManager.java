@@ -39,7 +39,7 @@ public class TabManager {
         public Tab(String url) {
             this.id = UUID.randomUUID().toString();
             this.url = url;
-            this.label = AppConfig.extractTabLabel(url);
+            this.label = "tab"; // Will be updated with context
         }
 
         public Tab(String id, String url, String label) {
@@ -90,7 +90,7 @@ public class TabManager {
         }
 
         // No saved tabs - create default gateway tab
-        addTab(AppConfig.getGatewayUrl());
+        addTab(AppConfig.getGatewayUrl(context));
     }
 
     public Tab addTab(String url) {
@@ -113,7 +113,7 @@ public class TabManager {
             tabs.remove(0);
             if (listener != null) listener.onTabRemoved(oldTab, 0);
 
-            addTab(AppConfig.getGatewayUrl());
+            addTab(AppConfig.getGatewayUrl(context));
             return;
         }
 
@@ -180,7 +180,7 @@ public class TabManager {
         Tab tab = getTabById(tabId);
         if (tab != null) {
             tab.url = newUrl;
-            tab.label = AppConfig.extractTabLabel(newUrl);
+            tab.label = AppConfig.extractTabLabel(newUrl, AppConfig.getBaseUrl(context));
             persist();
             if (listener != null) listener.onTabsChanged();
         }

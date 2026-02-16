@@ -12,10 +12,14 @@ public class IMESwitchManager {
 
     private final Context context;
     private boolean hasPermission;
+    private String terminalImeId;
+    private String defaultImeId;
 
     public IMESwitchManager(Context context) {
         this.context = context;
         this.hasPermission = checkPermission();
+        this.terminalImeId = AppConfig.getTerminalImeId(context);
+        this.defaultImeId = AppConfig.getDefaultImeId(context);
     }
 
     public boolean hasPermission() {
@@ -26,12 +30,14 @@ public class IMESwitchManager {
         this.hasPermission = checkPermission();
     }
 
+    public void updateImeIds(String terminalIme, String defaultIme) {
+        this.terminalImeId = terminalIme;
+        this.defaultImeId = defaultIme;
+    }
+
     private boolean checkPermission() {
         try {
             ContentResolver resolver = context.getContentResolver();
-            // Try reading a secure setting to verify permission
-            Settings.Secure.getString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD);
-            // Try writing to test write permission - write the current value back
             String current = Settings.Secure.getString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD);
             Settings.Secure.putString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD, current);
             return true;
@@ -44,15 +50,14 @@ public class IMESwitchManager {
     public void switchToTerminalKeyboard() {
         if (!hasPermission) return;
         try {
-            String terminalIme = AppConfig.getTerminalImeId();
             String currentIme = getCurrentIme();
-            if (!terminalIme.equals(currentIme)) {
+            if (!terminalImeId.equals(currentIme)) {
                 Settings.Secure.putString(
                     context.getContentResolver(),
                     Settings.Secure.DEFAULT_INPUT_METHOD,
-                    terminalIme
+                    terminalImeId
                 );
-                Log.d(TAG, "Switched to terminal keyboard: " + terminalIme);
+                Log.d(TAG, "Switched to terminal keyboard: " + terminalImeId);
             }
         } catch (SecurityException e) {
             Log.e(TAG, "Failed to switch to terminal keyboard", e);
@@ -63,15 +68,14 @@ public class IMESwitchManager {
     public void switchToDefaultKeyboard() {
         if (!hasPermission) return;
         try {
-            String defaultIme = AppConfig.getDefaultImeId();
             String currentIme = getCurrentIme();
-            if (!defaultIme.equals(currentIme)) {
+            if (!defaultImeId.equals(currentIme)) {
                 Settings.Secure.putString(
                     context.getContentResolver(),
                     Settings.Secure.DEFAULT_INPUT_METHOD,
-                    defaultIme
+                    defaultImeId
                 );
-                Log.d(TAG, "Switched to default keyboard: " + defaultIme);
+                Log.d(TAG, "Switched to default keyboard: " + defaultImeId);
             }
         } catch (SecurityException e) {
             Log.e(TAG, "Failed to switch to default keyboard", e);
