@@ -50,4 +50,26 @@
     <string name="save">Save</string>
     <string name="about_section">About</string>
     <string name="app_version">Version %s</string>
+
+    <!-- SSH/SFTP Settings -->
+    <string name="sftp_section">SFTP Connection</string>
+    <string name="ssh_port">SSH Port</string>
+    <string name="ssh_username">SSH Username</string>
+
+    <!-- File Browser -->
+    <string name="file_browser">File Browser</string>
+    <string name="empty_directory">Empty directory</string>
+    <string name="sftp_connecting">Connecting via SFTP\u2026</string>
+    <string name="sftp_reconnecting">Reconnecting\u2026</string>
+    <string name="sftp_error">SFTP connection failed</string>
+    <string name="sftp_no_key">Generate an SSH key in Settings first</string>
+    <string name="sftp_host_key_changed">Server identity has changed! This could indicate a security threat.</string>
+    <string name="sftp_host_key_accept">Accept &amp; Connect</string>
+    <string name="sftp_host_key_reject">Cancel</string>
+    <string name="sftp_host_key_new_title">New Server</string>
+    <string name="sftp_host_key_new_message">First connection to %1$s. Accept server fingerprint?\n\n%2$s</string>
+    <string name="sftp_host_key_changed_title">Warning: Server Identity Changed</string>
+    <string name="reload">Reload</string>
+    <string name="toggle_hidden_files">Toggle Hidden Files</string>
+    <string name="no_session_for_browser">Open a terminal session first to use the file browser</string>
 </resources>

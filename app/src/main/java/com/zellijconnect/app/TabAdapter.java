@@ -4,6 +4,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -44,6 +45,10 @@ public class TabAdapter extends RecyclerView.Adapter<TabAdapter.ViewHolder> {
 
         holder.label.setText(tab.label);
 
+        // Show folder icon for file browser tabs
+        holder.tabTypeIcon.setVisibility(
+            tab.type == TabManager.TabType.FILE_BROWSER ? View.VISIBLE : View.GONE);
+
         boolean isActive = tab.id.equals(
             tabManager.getActiveTab() != null ? tabManager.getActiveTab().id : null
         );
@@ -72,12 +77,14 @@ public class TabAdapter extends RecyclerView.Adapter<TabAdapter.ViewHolder> {
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
+        final ImageView tabTypeIcon;
         final TextView label;
         final View activeIndicator;
         final ImageButton closeButton;
 
         ViewHolder(View itemView) {
             super(itemView);
+            tabTypeIcon = itemView.findViewById(R.id.tabTypeIcon);
             label = itemView.findViewById(R.id.tabLabel);
             activeIndicator = itemView.findViewById(R.id.activeIndicator);
             closeButton = itemView.findViewById(R.id.btnCloseTab);

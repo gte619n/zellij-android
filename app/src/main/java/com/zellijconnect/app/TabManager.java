@@ -31,21 +31,42 @@ public class TabManager {
         void onTabsChanged();
     }
 
+    public enum TabType {
+        TERMINAL,
+        FILE_BROWSER
+    }
+
     public static class Tab {
         public final String id;
         public String url;
         public String label;
+        public TabType type;
+        public String linkedSessionName; // For FILE_BROWSER tabs: which session this browser belongs to
+        public String currentPath;       // For FILE_BROWSER tabs: current directory path
 
         public Tab(String url) {
             this.id = UUID.randomUUID().toString();
             this.url = url;
             this.label = "tab"; // Will be updated with context
+            this.type = TabType.TERMINAL;
         }
 
         public Tab(String id, String url, String label) {
             this.id = id;
             this.url = url;
             this.label = label;
+            this.type = TabType.TERMINAL;
+        }
+
+        public static Tab fileBrowser(String sessionName, String initialPath) {
+            Tab tab = new Tab("");
+            tab.type = TabType.FILE_BROWSER;
+            tab.linkedSessionName = sessionName;
+            tab.currentPath = initialPath;
+            tab.label = initialPath != null ?
+                initialPath.substring(initialPath.lastIndexOf('/') + 1) : "files";
+            if (tab.label.isEmpty()) tab.label = "/";
+            return tab;
         }
     }
 
@@ -72,6 +93,10 @@ public class TabManager {
                         obj.getString("url"),
                         obj.getString("label")
                     );
+                    String typeStr = obj.optString("type", "TERMINAL");
+                    tab.type = "FILE_BROWSER".equals(typeStr) ? TabType.FILE_BROWSER : TabType.TERMINAL;
+                    tab.linkedSessionName = obj.optString("linkedSessionName", null);
+                    tab.currentPath = obj.optString("currentPath", null);
                     tabs.add(tab);
                 }
                 if (!tabs.isEmpty()) {
@@ -95,6 +120,19 @@ public class TabManager {
 
     public Tab addTab(String url) {
         Tab tab = new Tab(url);
+        tabs.add(tab);
+        activeTabId = tab.id;
+        persist();
+        int position = tabs.size() - 1;
+        if (listener != null) {
+            listener.onTabAdded(tab, position);
+            listener.onTabSelected(tab, position);
+        }
+        return tab;
+    }
+
+    public Tab addFileBrowserTab(String sessionName, String initialPath) {
+        Tab tab = Tab.fileBrowser(sessionName, initialPath);
         tabs.add(tab);
         activeTabId = tab.id;
         persist();
@@ -202,6 +240,9 @@ public class TabManager {
                 obj.put("id", tab.id);
                 obj.put("url", tab.url);
                 obj.put("label", tab.label);
+                obj.put("type", tab.type.name());
+                if (tab.linkedSessionName != null) obj.put("linkedSessionName", tab.linkedSessionName);
+                if (tab.currentPath != null) obj.put("currentPath", tab.currentPath);
                 arr.put(obj);
             }
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

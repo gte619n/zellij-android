@@ -74,6 +74,33 @@ public final class AppConfig {
         getPrefs(ctx).edit().putInt("metadata_port", port).apply();
     }
 
+    // --- SSH/SFTP Settings ---
+
+    public static int getSshPort(Context ctx) {
+        return getPrefs(ctx).getInt("ssh_port", 22);
+    }
+
+    public static void setSshPort(Context ctx, int port) {
+        getPrefs(ctx).edit().putInt("ssh_port", port).apply();
+    }
+
+    public static String getSshUsername(Context ctx) {
+        return getPrefs(ctx).getString("ssh_username", "");
+    }
+
+    public static void setSshUsername(Context ctx, String username) {
+        getPrefs(ctx).edit().putString("ssh_username", username).apply();
+    }
+
+    public static String getSshHost(Context ctx) {
+        try {
+            android.net.Uri uri = android.net.Uri.parse(getBaseUrl(ctx));
+            return uri.getHost();
+        } catch (Exception e) {
+            return "localhost";
+        }
+    }
+
     // --- Utility (no Context needed) ---
 
     public static String extractTabLabel(String url, String baseUrl) {

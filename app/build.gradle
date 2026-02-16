@@ -65,4 +65,7 @@ dependencies {
     implementation 'androidx.activity:activity:1.10.0'
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
     implementation 'androidx.webkit:webkit:1.12.1'
+
+    // SFTP file browser
+    implementation 'com.github.mwiede:jsch:0.2.21'
 }

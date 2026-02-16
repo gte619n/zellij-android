@@ -16,6 +16,14 @@
         android:minWidth="60dp"
         android:background="?attr/selectableItemBackground">
 
+        <ImageView
+            android:id="@+id/tabTypeIcon"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_folder"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/tabLabel"
             android:layout_width="wrap_content"

@@ -31,7 +31,9 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -54,6 +56,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     private WebViewPool webViewPool;
     private IMESwitchManager imeSwitchManager;
     private ConnectionMonitor connectionMonitor;
+    private SftpManager sftpManager;
     private TabAdapter tabAdapter;
 
     private FrameLayout webViewContainer;
@@ -63,6 +66,11 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     private boolean isImmersive;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Runnable connectingTimeout = () -> connectingIndicator.setVisibility(View.GONE);
+
+    // File browser views keyed by tab ID
+    private final Map<String, FileBrowserView> fileBrowserViews = new HashMap<>();
+    // Cache of last fetched sessions for file browser CWD lookup
+    private List<SessionInfo> cachedSessions = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,6 +121,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         Button btnRetry = findViewById(R.id.btnRetry);
         Button btnEscape = findViewById(R.id.btnEscape);
         ImageButton btnAddTab = findViewById(R.id.btnAddTab);
+        ImageButton btnFileBrowser = findViewById(R.id.btnFileBrowser);
         ImageButton btnSettings = findViewById(R.id.btnSettings);
         ImageButton btnToggleImmersive = findViewById(R.id.btnToggleImmersive);
 
@@ -122,6 +131,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         tabManager = new TabManager(this);
         tabManager.setListener(this);
         connectionMonitor = new ConnectionMonitor(errorBanner, btnRetry, webViewPool);
+        sftpManager = new SftpManager(this);
 
         // Wire WebViewPool callbacks
         webViewPool.setErrorCallback(new WebViewPool.ErrorCallback() {
@@ -176,6 +186,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         // Button listeners
         btnEscape.setOnClickListener(v -> sendEscapeKey());
         btnAddTab.setOnClickListener(v -> showSessionPicker());
+        btnFileBrowser.setOnClickListener(v -> openFileBrowser());
         btnSettings.setOnClickListener(v -> showSettings());
         btnToggleImmersive.setOnClickListener(v -> toggleImmersiveMode());
 
@@ -186,16 +197,23 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
             applyImmersiveMode(true);
         }
 
-        // Back button: go back in WebView or minimize app
+        // Back button: navigate up in file browser, go back in WebView, or minimize app
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
                 TabManager.Tab active = tabManager.getActiveTab();
                 if (active != null) {
-                    WebView webView = webViewPool.get(active.id);
-                    if (webView != null && webView.canGoBack()) {
-                        webView.goBack();
-                        return;
+                    if (active.type == TabManager.TabType.FILE_BROWSER) {
+                        FileBrowserView browserView = fileBrowserViews.get(active.id);
+                        if (browserView != null && browserView.navigateUp()) {
+                            return;
+                        }
+                    } else {
+                        WebView webView = webViewPool.get(active.id);
+                        if (webView != null && webView.canGoBack()) {
+                            webView.goBack();
+                            return;
+                        }
                     }
                 }
                 moveTaskToBack(true);
@@ -253,20 +271,24 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     @Override
     public void onTabAdded(TabManager.Tab tab, int position) {
         tabAdapter.notifyItemInserted(position);
-        showWebViewForTab(tab);
+        showViewForTab(tab);
         KeepAliveService.updateTabCount(this, tabManager.getTabCount());
     }
 
     @Override
     public void onTabRemoved(TabManager.Tab tab, int position) {
         tabAdapter.notifyItemRemoved(position);
+        // Clean up file browser view if it was a file browser tab
+        if (tab.type == TabManager.TabType.FILE_BROWSER) {
+            fileBrowserViews.remove(tab.id);
+        }
         KeepAliveService.updateTabCount(this, tabManager.getTabCount());
     }
 
     @Override
     public void onTabSelected(TabManager.Tab tab, int position) {
         tabAdapter.notifyDataSetChanged();
-        showWebViewForTab(tab);
+        showViewForTab(tab);
         tabStrip.smoothScrollToPosition(position);
     }
 
@@ -275,7 +297,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         tabAdapter.notifyDataSetChanged();
         TabManager.Tab active = tabManager.getActiveTab();
         if (active != null) {
-            showWebViewForTab(active);
+            showViewForTab(active);
         }
     }
 
@@ -380,7 +402,89 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         });
     }
 
+    private void openFileBrowser() {
+        // Fetch sessions to find CWD, then open browser tab
+        executor.execute(() -> {
+            String initialPath = "/";
+            try {
+                TabManager.Tab active = tabManager.getActiveTab();
+                if (active != null && active.type == TabManager.TabType.TERMINAL) {
+                    Uri baseUri = Uri.parse(AppConfig.getBaseUrl(this));
+                    int metadataPort = AppConfig.getMetadataPort(this);
+                    String apiUrl = "https://" + baseUri.getHost() + ":" + metadataPort + "/api/sessions";
+
+                    URL url = new URL(apiUrl);
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(3000);
+                    conn.setReadTimeout(3000);
+
+                    if (conn.getResponseCode() == 200) {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                        StringBuilder response = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            response.append(line);
+                        }
+                        reader.close();
+
+                        JSONObject json = new JSONObject(response.toString());
+                        JSONArray sessionArray = json.getJSONArray("sessions");
+
+                        for (int i = 0; i < sessionArray.length(); i++) {
+                            JSONObject s = sessionArray.getJSONObject(i);
+                            String sessionName = s.optString("name", "");
+                            if (active.url != null && active.url.contains("/" + sessionName)) {
+                                String cwd = s.optString("workingDirectory", "");
+                                if (!cwd.isEmpty()) {
+                                    initialPath = cwd;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    conn.disconnect();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error fetching session CWD for file browser", e);
+            }
+
+            final String path = initialPath;
+            final String sessionName = deriveSessionName();
+            runOnUiThread(() -> tabManager.addFileBrowserTab(sessionName, path));
+        });
+    }
+
+    private String deriveSessionName() {
+        TabManager.Tab active = tabManager.getActiveTab();
+        if (active != null && active.url != null) {
+            Uri uri = Uri.parse(active.url);
+            String path = uri.getPath();
+            if (path != null && path.length() > 1) {
+                String name = path.substring(1);
+                int q = name.indexOf('?');
+                if (q >= 0) name = name.substring(0, q);
+                int s = name.indexOf('/');
+                if (s >= 0) name = name.substring(0, s);
+                return name;
+            }
+        }
+        return "files";
+    }
+
     private void closeTabWithDetach(String tabId, int position) {
+        TabManager.Tab tab = tabManager.getTabAt(position);
+
+        // File browser tabs: just remove immediately (no Zellij detach needed)
+        if (tab != null && tab.type == TabManager.TabType.FILE_BROWSER) {
+            FileBrowserView browserView = fileBrowserViews.remove(tabId);
+            if (browserView != null && browserView.getParent() != null) {
+                ((ViewGroup) browserView.getParent()).removeView(browserView);
+            }
+            tabManager.removeTab(position);
+            return;
+        }
+
         WebView webView = webViewPool.get(tabId);
         if (webView != null) {
             // Send Zellij detach command: Ctrl+O followed by 'd'
@@ -407,31 +511,57 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         }, 150);
     }
 
-    private void showWebViewForTab(TabManager.Tab tab) {
-        // Remove current WebView from container (but don't destroy it)
-        // Keep all WebViews alive in the pool
+    private void showViewForTab(TabManager.Tab tab) {
+        // Remove current content views from container (WebViews and FileBrowserViews)
         for (int i = webViewContainer.getChildCount() - 1; i >= 0; i--) {
             View child = webViewContainer.getChildAt(i);
-            if (child instanceof WebView) {
+            if (child instanceof WebView || child instanceof FileBrowserView) {
                 webViewContainer.removeViewAt(i);
             }
         }
 
-        WebView webView = webViewPool.getOrCreate(tab.id, tab.url);
+        if (tab.type == TabManager.TabType.FILE_BROWSER) {
+            showFileBrowserForTab(tab);
+        } else {
+            // Terminal tab — show WebView
+            WebView webView = webViewPool.getOrCreate(tab.id, tab.url);
+            if (webView.getParent() != null) {
+                ((ViewGroup) webView.getParent()).removeView(webView);
+            }
+            webViewContainer.addView(webView, 0,
+                new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            );
+            webView.requestFocus();
+        }
+    }
 
-        // Remove from any existing parent
-        if (webView.getParent() != null) {
-            ((ViewGroup) webView.getParent()).removeView(webView);
+    private void showFileBrowserForTab(TabManager.Tab tab) {
+        FileBrowserView browserView = fileBrowserViews.get(tab.id);
+        if (browserView == null) {
+            browserView = new FileBrowserView(this);
+            String host = AppConfig.getSshHost(this);
+            int port = AppConfig.getSshPort(this);
+            String initialPath = tab.currentPath != null ? tab.currentPath : "/";
+            browserView.setup(sftpManager, host, port, initialPath);
+            fileBrowserViews.put(tab.id, browserView);
+        } else {
+            // Auto-refresh directory listing on tab switch
+            browserView.refresh();
         }
 
-        webViewContainer.addView(webView, 0,
+        if (browserView.getParent() != null) {
+            ((ViewGroup) browserView.getParent()).removeView(browserView);
+        }
+
+        webViewContainer.addView(browserView, 0,
             new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         );
-
-        webView.requestFocus();
     }
 
     // --- IME Switching ---
@@ -440,9 +570,10 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
-            imeSwitchManager.switchToTerminalKeyboard();
             TabManager.Tab active = tabManager.getActiveTab();
-            if (active != null) {
+            // Only switch to terminal keyboard for terminal tabs
+            if (active != null && active.type == TabManager.TabType.TERMINAL) {
+                imeSwitchManager.switchToTerminalKeyboard();
                 WebView wv = webViewPool.get(active.id);
                 if (wv != null) {
                     imeSwitchManager.showKeyboard(wv);
@@ -551,6 +682,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     protected void onDestroy() {
         if (connectionMonitor != null) connectionMonitor.destroy();
         if (webViewPool != null) webViewPool.destroyAll();
+        if (sftpManager != null) sftpManager.shutdown();
         executor.shutdown();
         KeepAliveService.stop(this);
         super.onDestroy();

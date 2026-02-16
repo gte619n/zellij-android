@@ -36,6 +36,8 @@ public class SettingsDialog extends Dialog {
     private EditText editBaseUrl;
     private EditText editMetadataPort;
     private EditText editAuthToken;
+    private EditText editSshPort;
+    private EditText editSshUsername;
     private Spinner spinnerTerminalIme;
     private Spinner spinnerDefaultIme;
     private TextView txtPublicKey;
@@ -62,6 +64,8 @@ public class SettingsDialog extends Dialog {
         editBaseUrl = findViewById(R.id.editBaseUrl);
         editMetadataPort = findViewById(R.id.editMetadataPort);
         editAuthToken = findViewById(R.id.editAuthToken);
+        editSshPort = findViewById(R.id.editSshPort);
+        editSshUsername = findViewById(R.id.editSshUsername);
         spinnerTerminalIme = findViewById(R.id.spinnerTerminalIme);
         spinnerDefaultIme = findViewById(R.id.spinnerDefaultIme);
         txtPublicKey = findViewById(R.id.txtPublicKey);
@@ -75,6 +79,8 @@ public class SettingsDialog extends Dialog {
         editBaseUrl.setText(AppConfig.getBaseUrl(ctx));
         editMetadataPort.setText(String.valueOf(AppConfig.getMetadataPort(ctx)));
         editAuthToken.setText(AppConfig.getZellijToken(ctx));
+        editSshPort.setText(String.valueOf(AppConfig.getSshPort(ctx)));
+        editSshUsername.setText(AppConfig.getSshUsername(ctx));
 
         // Populate IME spinners
         populateImeSpinners(ctx);
@@ -178,6 +184,18 @@ public class SettingsDialog extends Dialog {
 
         String token = editAuthToken.getText().toString().trim();
         AppConfig.setZellijToken(ctx, token);
+
+        // SSH/SFTP config
+        String sshPortStr = editSshPort.getText().toString().trim();
+        if (!sshPortStr.isEmpty()) {
+            try {
+                int sshPort = Integer.parseInt(sshPortStr);
+                AppConfig.setSshPort(ctx, sshPort);
+            } catch (NumberFormatException ignored) {}
+        }
+
+        String sshUsername = editSshUsername.getText().toString().trim();
+        AppConfig.setSshUsername(ctx, sshUsername);
 
         // Keyboard config
         int terminalPos = spinnerTerminalIme.getSelectedItemPosition();

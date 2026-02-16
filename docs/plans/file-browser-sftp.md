@@ -2,7 +2,7 @@
 
 **Author:** Claude (PM/Senior Dev)
 **Date:** 2026-02-16
-**Status:** Planning Complete
+**Status:** Phase 1 Code Complete (needs device testing)
 **Branch:** TBD
 
 ---
@@ -202,27 +202,27 @@ showViewForTab(Tab tab):
 
 | ID | Task | Files | Status | Tested | Pushed |
 |----|------|-------|--------|--------|--------|
-| P1.1 | Add JSch mwiede fork dependency to build.gradle | `app/build.gradle` | [ ] | [ ] | [ ] |
-| P1.2 | Add SSH port and username fields to AppConfig | `AppConfig.java` | [ ] | [ ] | [ ] |
-| P1.3 | Add SSH port and username to Settings dialog | `SettingsDialog.java`, `dialog_settings.xml`, `strings.xml` | [ ] | [ ] | [ ] |
-| P1.4 | Add PKCS8-to-OpenSSH private key conversion in SshKeyManager | `SshKeyManager.java` | [ ] | [ ] | [ ] |
-| P1.5 | Create SftpHostKeyStore (TOFU host key verification) | `SftpHostKeyStore.java` (new) | [ ] | [ ] | [ ] |
-| P1.6 | Create SftpManager (connection pooling, connect/disconnect/reconnect) | `SftpManager.java` (new) | [ ] | [ ] | [ ] |
-| P1.7 | Create SftpFileEntry data class | `SftpFileEntry.java` (new) | [ ] | [ ] | [ ] |
-| P1.8 | Add TabType enum to TabManager.Tab, add linkedSessionName field | `TabManager.java` | [ ] | [ ] | [ ] |
-| P1.9 | Create ic_file_browser.xml folder icon drawable | `res/drawable/ic_file_browser.xml` (new) | [ ] | [ ] | [ ] |
-| P1.10 | Add file browser button to activity_main.xml (between + and Settings) | `activity_main.xml` | [ ] | [ ] | [ ] |
-| P1.11 | Create item_file_entry.xml layout | `res/layout/item_file_entry.xml` (new) | [ ] | [ ] | [ ] |
-| P1.12 | Create BreadcrumbBar view | `BreadcrumbBar.java` (new), `view_breadcrumb.xml` (new) | [ ] | [ ] | [ ] |
-| P1.13 | Create FileBrowserAdapter (directory listing) | `FileBrowserAdapter.java` (new) | [ ] | [ ] | [ ] |
-| P1.14 | Create FileBrowserView (compound: breadcrumb + RecyclerView) | `FileBrowserView.java` (new), `view_file_browser.xml` (new) | [ ] | [ ] | [ ] |
-| P1.15 | Create file type icons (generic, folder variants) | `res/drawable/ic_file_*.xml` (new) | [ ] | [ ] | [ ] |
-| P1.16 | Wire folder button in MainActivity, handle dual tab types | `MainActivity.java` | [ ] | [ ] | [ ] |
-| P1.17 | Update TabAdapter for FILE_BROWSER tab visual distinction | `TabAdapter.java` | [ ] | [ ] | [ ] |
-| P1.18 | Implement hidden files toggle (default hidden, toolbar button to show) | `FileBrowserView.java` | [ ] | [ ] | [ ] |
-| P1.19 | Implement auto-reconnect with toast on SFTP errors | `SftpManager.java` | [ ] | [ ] | [ ] |
-| P1.20 | Implement auto-refresh directory listing on tab switch | `MainActivity.java`, `FileBrowserView.java` | [ ] | [ ] | [ ] |
-| P1.21 | Build and verify on device | — | [ ] | [ ] | [ ] |
+| P1.1 | Add JSch mwiede fork dependency to build.gradle | `app/build.gradle` | [x] | [ ] | [ ] |
+| P1.2 | Add SSH port and username fields to AppConfig | `AppConfig.java` | [x] | [ ] | [ ] |
+| P1.3 | Add SSH port and username to Settings dialog | `SettingsDialog.java`, `dialog_settings.xml`, `strings.xml` | [x] | [ ] | [ ] |
+| P1.4 | Add PKCS8-to-OpenSSH private key conversion in SshKeyManager | `SshKeyManager.java` | SKIPPED (JSch loads PKCS8 directly via addIdentity) | [ ] | [ ] |
+| P1.5 | Create SftpHostKeyStore (TOFU host key verification) | `SftpHostKeyStore.java` (new) | [x] | [ ] | [ ] |
+| P1.6 | Create SftpManager (connection pooling, connect/disconnect/reconnect) | `SftpManager.java` (new) | [x] | [ ] | [ ] |
+| P1.7 | Create SftpFileEntry data class | `SftpFileEntry.java` (new) | [x] | [ ] | [ ] |
+| P1.8 | Add TabType enum to TabManager.Tab, add linkedSessionName field | `TabManager.java` | [x] | [ ] | [ ] |
+| P1.9 | Create ic_file_browser.xml folder icon drawable | `res/drawable/ic_file_browser.xml` (new) | [x] | [ ] | [ ] |
+| P1.10 | Add file browser button to activity_main.xml (between + and Settings) | `activity_main.xml` | [x] | [ ] | [ ] |
+| P1.11 | Create item_file_entry.xml layout | `res/layout/item_file_entry.xml` (new) | [x] | [ ] | [ ] |
+| P1.12 | Create BreadcrumbBar view | Inline in `FileBrowserView.java` + `view_file_browser.xml` | [x] | [ ] | [ ] |
+| P1.13 | Create FileBrowserAdapter (directory listing) | `FileBrowserAdapter.java` (new) | [x] | [ ] | [ ] |
+| P1.14 | Create FileBrowserView (compound: breadcrumb + RecyclerView) | `FileBrowserView.java` (new), `view_file_browser.xml` (new) | [x] | [ ] | [ ] |
+| P1.15 | Create file type icons (generic, folder variants) | `res/drawable/ic_file_*.xml` (new) | [x] | [ ] | [ ] |
+| P1.16 | Wire folder button in MainActivity, handle dual tab types | `MainActivity.java` | [x] | [ ] | [ ] |
+| P1.17 | Update TabAdapter for FILE_BROWSER tab visual distinction | `TabAdapter.java` | [x] | [ ] | [ ] |
+| P1.18 | Implement hidden files toggle (default hidden, toolbar button to show) | `FileBrowserView.java` | [x] | [ ] | [ ] |
+| P1.19 | Implement auto-reconnect with toast on SFTP errors | `SftpManager.java` | [x] | [ ] | [ ] |
+| P1.20 | Implement auto-refresh directory listing on tab switch | `MainActivity.java`, `FileBrowserView.java` | [x] | [ ] | [ ] |
+| P1.21 | Build and verify on device | — | [x] (builds) | [ ] | [ ] |
 
 ### 4.2 Acceptance Criteria
 
@@ -343,10 +343,10 @@ Prism4j supports these languages out of the box via `@PrismBundle`:
 
 | Phase | Description | Tasks | Completed | Status |
 |-------|-------------|-------|-----------|--------|
-| Phase 1 | SFTP Connection + Directory Browsing | 21 | 0 | NOT STARTED |
+| Phase 1 | SFTP Connection + Directory Browsing | 21 | 20 | CODE COMPLETE (needs device test) |
 | Phase 2 | Text/Markdown Viewer + Syntax Highlighting | 14 | 0 | NOT STARTED |
 | Phase 3 | Rich Content (Images) + Copy/Share | 10 | 0 | NOT STARTED |
-| **Total** | | **45** | **0** | |
+| **Total** | | **45** | **20** | |
 
 ### Git Integration
 
