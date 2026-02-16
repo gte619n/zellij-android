@@ -1,18 +1,29 @@
 package com.zellijconnect.app;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.os.Parcelable;
-import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.core.content.FileProvider;
 
 import io.noties.markwon.Markwon;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
@@ -22,39 +33,73 @@ import io.noties.markwon.syntax.Prism4jThemeDarkula;
 import io.noties.markwon.syntax.SyntaxHighlightPlugin;
 import io.noties.prism4j.Prism4j;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * View for displaying file contents with markdown rendering and syntax highlighting.
- * Supports truncation with load-more, binary detection, and scroll preservation.
+ * View for displaying file contents with markdown rendering, syntax highlighting,
+ * image viewing with zoom/pan, copy/share actions, and large file confirmation.
  */
 public class FileViewerView extends LinearLayout {
 
     private static final String TAG = "ZellijConnect";
     private static final int LINES_PER_PAGE = 500;
+    private static final long LARGE_IMAGE_THRESHOLD = 5 * 1024 * 1024; // 5MB
 
+    // Toolbar
     private TextView txtFileName;
+    private TextView txtFileSize;
     private ImageButton btnBack;
     private ImageButton btnReloadFile;
+    private ImageButton btnCopy;
+    private ImageButton btnShare;
+
+    // Text content
     private ScrollView contentScroll;
     private TextView txtContent;
     private Button btnLoadMore;
+
+    // Image content
+    private FrameLayout imageContainer;
+    private ImageView imageView;
+
+    // Large file confirmation
+    private LinearLayout largeFileConfirm;
+    private TextView txtLargeFileMessage;
+    private Button btnConfirmDownload;
+
+    // States
     private ProgressBar fileLoadingIndicator;
     private TextView fileErrorText;
     private TextView binaryMessage;
 
+    // Rendering
     private Markwon markwon;
     private Prism4j prism4j;
 
+    // Data
     private SftpManager sftpManager;
     private String host;
     private int port;
     private String currentFilePath;
     private String currentFileName;
-    private byte[] fullContent;        // Raw file bytes
-    private String[] allLines;         // Split lines
-    private int linesShown;            // How many lines currently displayed
+    private long currentFileSize;
+    private byte[] fullContent;
+    private String[] allLines;
+    private int linesShown;
     private Parcelable pendingScrollState;
+    private boolean isImageFile;
+    private Bitmap currentBitmap;
+
+    // Image zoom/pan
+    private Matrix imageMatrix = new Matrix();
+    private float scaleFactor = 1.0f;
+    private float translateX = 0f;
+    private float translateY = 0f;
+    private float lastTouchX;
+    private float lastTouchY;
+    private ScaleGestureDetector scaleDetector;
 
     private OnBackListener backListener;
 
@@ -67,20 +112,23 @@ public class FileViewerView extends LinearLayout {
         init(context);
     }
 
-    public FileViewerView(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        init(context);
-    }
-
     private void init(Context context) {
         LayoutInflater.from(context).inflate(R.layout.view_file_content, this, true);
 
         txtFileName = findViewById(R.id.txtFileName);
+        txtFileSize = findViewById(R.id.txtFileSize);
         btnBack = findViewById(R.id.btnBack);
         btnReloadFile = findViewById(R.id.btnReloadFile);
+        btnCopy = findViewById(R.id.btnCopy);
+        btnShare = findViewById(R.id.btnShare);
         contentScroll = findViewById(R.id.contentScroll);
         txtContent = findViewById(R.id.txtContent);
         btnLoadMore = findViewById(R.id.btnLoadMore);
+        imageContainer = findViewById(R.id.imageContainer);
+        imageView = findViewById(R.id.imageView);
+        largeFileConfirm = findViewById(R.id.largeFileConfirm);
+        txtLargeFileMessage = findViewById(R.id.txtLargeFileMessage);
+        btnConfirmDownload = findViewById(R.id.btnConfirmDownload);
         fileLoadingIndicator = findViewById(R.id.fileLoadingIndicator);
         fileErrorText = findViewById(R.id.fileErrorText);
         binaryMessage = findViewById(R.id.binaryMessage);
@@ -99,13 +147,48 @@ public class FileViewerView extends LinearLayout {
             markwon = Markwon.create(context);
         }
 
+        // Button listeners
         btnBack.setOnClickListener(v -> {
             if (backListener != null) backListener.onBack();
         });
-
         btnReloadFile.setOnClickListener(v -> reload());
-
         btnLoadMore.setOnClickListener(v -> loadMoreLines());
+        btnCopy.setOnClickListener(v -> copyToClipboard());
+        btnShare.setOnClickListener(v -> shareContent());
+
+        // Image zoom/pan
+        scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScale(ScaleGestureDetector detector) {
+                scaleFactor *= detector.getScaleFactor();
+                scaleFactor = Math.max(0.5f, Math.min(scaleFactor, 5.0f));
+                updateImageMatrix();
+                return true;
+            }
+        });
+
+        imageContainer.setOnTouchListener((v, event) -> {
+            scaleDetector.onTouchEvent(event);
+
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    lastTouchX = event.getX();
+                    lastTouchY = event.getY();
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (!scaleDetector.isInProgress()) {
+                        float dx = event.getX() - lastTouchX;
+                        float dy = event.getY() - lastTouchY;
+                        translateX += dx;
+                        translateY += dy;
+                        updateImageMatrix();
+                        lastTouchX = event.getX();
+                        lastTouchY = event.getY();
+                    }
+                    break;
+            }
+            return true;
+        });
     }
 
     public void setup(SftpManager sftpManager, String host, int port) {
@@ -124,9 +207,59 @@ public class FileViewerView extends LinearLayout {
     public void viewFile(String path, String fileName) {
         this.currentFilePath = path;
         this.currentFileName = fileName;
+        this.currentFileSize = 0;
         this.pendingScrollState = null;
+        this.isImageFile = false;
+        this.fullContent = null;
+        if (currentBitmap != null) {
+            currentBitmap.recycle();
+            currentBitmap = null;
+        }
+
         txtFileName.setText(fileName);
-        loadFile(path);
+
+        FileTypeDetector.FileType fileType = FileTypeDetector.detect(fileName);
+        if (fileType == FileTypeDetector.FileType.IMAGE) {
+            isImageFile = true;
+            // Check file size first before downloading
+            checkImageSize(path, fileName);
+        } else {
+            loadFile(path);
+        }
+    }
+
+    /**
+     * Check image size and prompt if large.
+     */
+    private void checkImageSize(String path, String fileName) {
+        showLoading();
+        sftpManager.statFile(host, port, path, new SftpManager.StatCallback() {
+            @Override
+            public void onSuccess(long sizeBytes) {
+                currentFileSize = sizeBytes;
+                showFileSize(sizeBytes);
+                if (sizeBytes > LARGE_IMAGE_THRESHOLD) {
+                    showLargeFileConfirm(sizeBytes);
+                } else {
+                    loadFile(path);
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                // Can't stat — just try loading it
+                loadFile(path);
+            }
+        });
+    }
+
+    private void showLargeFileConfirm(long sizeBytes) {
+        hideAllContent();
+        largeFileConfirm.setVisibility(View.VISIBLE);
+        txtLargeFileMessage.setText(getContext().getString(
+            R.string.large_image_confirm,
+            SftpFileEntry.humanReadableSize(sizeBytes)));
+        btnConfirmDownload.setOnClickListener(v -> loadFile(currentFilePath));
     }
 
     /**
@@ -139,17 +272,16 @@ public class FileViewerView extends LinearLayout {
                 ((android.os.Bundle) pendingScrollState).putIntArray("scroll",
                     new int[]{contentScroll.getScrollX(), contentScroll.getScrollY()});
             }
-            loadFile(currentFilePath);
+            if (isImageFile) {
+                checkImageSize(currentFilePath, currentFileName);
+            } else {
+                loadFile(currentFilePath);
+            }
         }
     }
 
-    public String getCurrentFilePath() {
-        return currentFilePath;
-    }
-
-    public String getCurrentFileName() {
-        return currentFileName;
-    }
+    public String getCurrentFilePath() { return currentFilePath; }
+    public String getCurrentFileName() { return currentFileName; }
 
     private void loadFile(String path) {
         showLoading();
@@ -158,7 +290,14 @@ public class FileViewerView extends LinearLayout {
             @Override
             public void onSuccess(byte[] content) {
                 fullContent = content;
-                renderContent(content);
+                currentFileSize = content.length;
+                showFileSize(content.length);
+
+                if (isImageFile) {
+                    renderImage(content);
+                } else {
+                    renderContent(content);
+                }
             }
 
             @Override
@@ -169,7 +308,6 @@ public class FileViewerView extends LinearLayout {
     }
 
     private void renderContent(byte[] content) {
-        // Check for binary content
         if (FileTypeDetector.isBinaryContent(content)) {
             showBinary(content.length);
             return;
@@ -177,6 +315,10 @@ public class FileViewerView extends LinearLayout {
 
         String text = new String(content, StandardCharsets.UTF_8);
         allLines = text.split("\n", -1);
+
+        // Show copy/share for text
+        btnCopy.setVisibility(View.VISIBLE);
+        btnShare.setVisibility(View.VISIBLE);
 
         FileTypeDetector.FileType fileType = FileTypeDetector.detect(currentFileName);
 
@@ -186,6 +328,50 @@ public class FileViewerView extends LinearLayout {
             renderSourceCode(text, currentFileName);
         } else {
             renderPlainText(text);
+        }
+    }
+
+    private void renderImage(byte[] content) {
+        try {
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            // Decode bounds first for large images
+            opts.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(content, 0, content.length, opts);
+
+            // Calculate sample size for very large images
+            int maxDim = Math.max(opts.outWidth, opts.outHeight);
+            int sampleSize = 1;
+            while (maxDim / sampleSize > 4096) {
+                sampleSize *= 2;
+            }
+
+            opts.inJustDecodeBounds = false;
+            opts.inSampleSize = sampleSize;
+            Bitmap bitmap = BitmapFactory.decodeByteArray(content, 0, content.length, opts);
+
+            if (bitmap == null) {
+                showError(getContext().getString(R.string.image_load_failed));
+                return;
+            }
+
+            if (currentBitmap != null) currentBitmap.recycle();
+            currentBitmap = bitmap;
+
+            // Reset zoom/pan
+            scaleFactor = 1.0f;
+            translateX = 0f;
+            translateY = 0f;
+
+            showImage();
+            imageView.setImageBitmap(bitmap);
+
+            // Show share button for images
+            btnCopy.setVisibility(View.GONE);
+            btnShare.setVisibility(View.VISIBLE);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to decode image", e);
+            showError(getContext().getString(R.string.image_load_failed));
         }
     }
 
@@ -200,7 +386,6 @@ public class FileViewerView extends LinearLayout {
         String displayText = truncateIfNeeded(text);
         String language = FileTypeDetector.getLanguage(fileName);
 
-        // Wrap in markdown code fence for Markwon syntax highlighting
         String fenced;
         if (language != null) {
             fenced = "```" + language + "\n" + displayText + "\n```";
@@ -274,6 +459,78 @@ public class FileViewerView extends LinearLayout {
         }
     }
 
+    // --- Copy / Share ---
+
+    private void copyToClipboard() {
+        if (fullContent == null) return;
+        String text = new String(fullContent, StandardCharsets.UTF_8);
+        ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(ClipData.newPlainText(currentFileName, text));
+        Toast.makeText(getContext(), R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show();
+    }
+
+    private void shareContent() {
+        if (fullContent == null) return;
+
+        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+
+        if (isImageFile && currentBitmap != null) {
+            // Share image via content URI
+            try {
+                File cacheDir = new File(getContext().getCacheDir(), "shared");
+                cacheDir.mkdirs();
+                File file = new File(cacheDir, currentFileName);
+                FileOutputStream fos = new FileOutputStream(file);
+                fos.write(fullContent);
+                fos.close();
+
+                android.net.Uri uri = FileProvider.getUriForFile(getContext(),
+                    getContext().getPackageName() + ".fileprovider", file);
+                shareIntent.setType(getMimeType(currentFileName));
+                shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+                shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to share image", e);
+                Toast.makeText(getContext(), "Failed to share: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                return;
+            }
+        } else {
+            // Share text content
+            String text = new String(fullContent, StandardCharsets.UTF_8);
+            shareIntent.setType("text/plain");
+            shareIntent.putExtra(Intent.EXTRA_TEXT, text);
+            shareIntent.putExtra(Intent.EXTRA_SUBJECT, currentFileName);
+        }
+
+        getContext().startActivity(Intent.createChooser(shareIntent, null));
+    }
+
+    private String getMimeType(String fileName) {
+        String ext = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
+        switch (ext) {
+            case "png": return "image/png";
+            case "jpg": case "jpeg": return "image/jpeg";
+            case "gif": return "image/gif";
+            case "webp": return "image/webp";
+            case "bmp": return "image/bmp";
+            case "svg": return "image/svg+xml";
+            default: return "application/octet-stream";
+        }
+    }
+
+    // --- Image zoom/pan ---
+
+    private void updateImageMatrix() {
+        imageMatrix.reset();
+        imageMatrix.postScale(scaleFactor, scaleFactor,
+            imageContainer.getWidth() / 2f, imageContainer.getHeight() / 2f);
+        imageMatrix.postTranslate(translateX, translateY);
+        imageView.setScaleType(ImageView.ScaleType.MATRIX);
+        imageView.setImageMatrix(imageMatrix);
+    }
+
+    // --- Scroll restoration ---
+
     private void restoreScroll() {
         if (pendingScrollState instanceof android.os.Bundle) {
             int[] scroll = ((android.os.Bundle) pendingScrollState).getIntArray("scroll");
@@ -284,34 +541,55 @@ public class FileViewerView extends LinearLayout {
         }
     }
 
-    private void showLoading() {
-        fileLoadingIndicator.setVisibility(View.VISIBLE);
+    // --- File size display ---
+
+    private void showFileSize(long sizeBytes) {
+        txtFileSize.setText(SftpFileEntry.humanReadableSize(sizeBytes));
+        txtFileSize.setVisibility(View.VISIBLE);
+    }
+
+    // --- Visibility helpers ---
+
+    private void hideAllContent() {
+        fileLoadingIndicator.setVisibility(View.GONE);
         contentScroll.setVisibility(View.GONE);
+        imageContainer.setVisibility(View.GONE);
+        largeFileConfirm.setVisibility(View.GONE);
         fileErrorText.setVisibility(View.GONE);
         binaryMessage.setVisibility(View.GONE);
+    }
+
+    private void showLoading() {
+        hideAllContent();
+        fileLoadingIndicator.setVisibility(View.VISIBLE);
+        btnCopy.setVisibility(View.GONE);
+        btnShare.setVisibility(View.GONE);
     }
 
     private void showContent() {
-        fileLoadingIndicator.setVisibility(View.GONE);
+        hideAllContent();
         contentScroll.setVisibility(View.VISIBLE);
-        fileErrorText.setVisibility(View.GONE);
-        binaryMessage.setVisibility(View.GONE);
+    }
+
+    private void showImage() {
+        hideAllContent();
+        imageContainer.setVisibility(View.VISIBLE);
     }
 
     private void showError(String message) {
-        fileLoadingIndicator.setVisibility(View.GONE);
-        contentScroll.setVisibility(View.GONE);
+        hideAllContent();
         fileErrorText.setVisibility(View.VISIBLE);
         fileErrorText.setText(message);
-        binaryMessage.setVisibility(View.GONE);
+        btnCopy.setVisibility(View.GONE);
+        btnShare.setVisibility(View.GONE);
     }
 
     private void showBinary(int sizeBytes) {
-        fileLoadingIndicator.setVisibility(View.GONE);
-        contentScroll.setVisibility(View.GONE);
-        fileErrorText.setVisibility(View.GONE);
+        hideAllContent();
         binaryMessage.setVisibility(View.VISIBLE);
         binaryMessage.setText(getContext().getString(R.string.binary_file,
             SftpFileEntry.humanReadableSize(sizeBytes)));
+        btnCopy.setVisibility(View.GONE);
+        btnShare.setVisibility(View.GONE);
     }
 }

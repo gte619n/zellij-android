@@ -78,4 +78,11 @@
     <string name="load_more">Load more\u2026</string>
     <string name="binary_file">Binary file (%1$s)</string>
     <string name="lines_truncated">Showing first %1$d of %2$d lines</string>
+    <string name="copy_content">Copy</string>
+    <string name="share_content">Share</string>
+    <string name="copied_to_clipboard">Copied to clipboard</string>
+    <string name="file_size_display">%1$s</string>
+    <string name="large_image_confirm">Image is %1$s. Download and display?</string>
+    <string name="download_image">Download</string>
+    <string name="image_load_failed">Failed to load image</string>
 </resources>

@@ -70,6 +70,9 @@ public class FileBrowserAdapter extends RecyclerView.Adapter<FileBrowserAdapter.
         if (entry.isDirectory) {
             holder.fileIcon.setImageResource(R.drawable.ic_folder);
             holder.fileName.setAlpha(1.0f);
+        } else if (FileTypeDetector.detect(entry.name) == FileTypeDetector.FileType.IMAGE) {
+            holder.fileIcon.setImageResource(R.drawable.ic_file_image);
+            holder.fileName.setAlpha(0.9f);
         } else {
             holder.fileIcon.setImageResource(R.drawable.ic_file_generic);
             holder.fileName.setAlpha(0.9f);

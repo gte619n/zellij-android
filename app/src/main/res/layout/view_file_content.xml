@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:background="?android:attr/colorBackground">
 
-    <!-- Toolbar: back + file name + reload -->
+    <!-- Toolbar: back + file name + size + copy + share + reload -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="40dp"
@@ -34,7 +34,41 @@
             android:fontFamily="monospace"
             android:maxLines="1"
             android:ellipsize="middle"
-            android:paddingHorizontal="8dp" />
+            android:paddingHorizontal="4dp" />
+
+        <!-- File size -->
+        <TextView
+            android:id="@+id/txtFileSize"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:paddingHorizontal="4dp"
+            android:visibility="gone" />
+
+        <!-- Copy to clipboard -->
+        <ImageButton
+            android:id="@+id/btnCopy"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@drawable/ic_copy"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/copy_content"
+            android:scaleType="centerInside"
+            android:padding="5dp"
+            android:visibility="gone" />
+
+        <!-- Share -->
+        <ImageButton
+            android:id="@+id/btnShare"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@drawable/ic_share"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/share_content"
+            android:scaleType="centerInside"
+            android:padding="5dp"
+            android:visibility="gone" />
 
         <ImageButton
             android:id="@+id/btnReloadFile"
@@ -53,7 +87,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Scrollable content -->
+        <!-- Scrollable text content -->
         <ScrollView
             android:id="@+id/contentScroll"
             android:layout_width="match_parent"
@@ -87,6 +121,54 @@
 
             </LinearLayout>
         </ScrollView>
+
+        <!-- Image viewer (zoomable) -->
+        <FrameLayout
+            android:id="@+id/imageContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/imageView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter" />
+        </FrameLayout>
+
+        <!-- Large file confirmation -->
+        <LinearLayout
+            android:id="@+id/largeFileConfirm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_file_image"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/txtLargeFileMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurface"
+                android:gravity="center"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btnConfirmDownload"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/download_image" />
+        </LinearLayout>
 
         <!-- Loading indicator -->
         <ProgressBar

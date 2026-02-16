@@ -135,6 +135,27 @@ public class SftpManager {
         });
     }
 
+    public interface StatCallback {
+        void onSuccess(long sizeBytes);
+        void onError(String message);
+    }
+
+    /**
+     * Get file size asynchronously via SFTP stat.
+     */
+    public void statFile(String host, int port, String path, StatCallback callback) {
+        executor.execute(() -> {
+            try {
+                ChannelSftp channel = getOrConnect(host, port);
+                long size = channel.stat(path).getSize();
+                mainHandler.post(() -> callback.onSuccess(size));
+            } catch (Exception e) {
+                Log.e(TAG, "SFTP stat failed: " + path, e);
+                mainHandler.post(() -> callback.onError("Failed to stat file: " + e.getMessage()));
+            }
+        });
+    }
+
     /**
      * Get or establish an SFTP connection for the given host.
      */
