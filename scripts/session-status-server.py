@@ -61,7 +61,8 @@ def get_zellij_sessions():
     sessions = []
     for line in output.split('\n'):
         line = line.strip()
-        if line and not line.startswith('No active'):
+        # Skip empty lines, "No active" messages, and EXITED sessions
+        if line and not line.startswith('No active') and '(EXITED' not in line:
             # Session names are the first word on each line
             session_name = line.split()[0] if line.split() else line
             sessions.append(session_name)

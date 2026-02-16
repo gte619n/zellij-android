@@ -7,14 +7,32 @@
     android:minWidth="520dp"
     android:background="?attr/colorSurface">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <!-- Title bar with Gateway button -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/session_picker_title"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:textColor="?attr/colorOnSurface"
-        android:layout_marginBottom="20dp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/session_picker_title"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface" />
+
+        <Button
+            android:id="@+id/btnGateway"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="@string/open_gateway"
+            android:textSize="12sp"
+            android:backgroundTint="?attr/colorPrimary" />
+    </LinearLayout>
 
     <!-- Active Sessions Section -->
     <TextView
@@ -109,10 +127,9 @@
         android:id="@+id/sessionList"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="280dp"
-        android:layout_marginBottom="20dp"
-        android:nestedScrollingEnabled="true"
-        android:clipToPadding="false" />
+        android:maxHeight="300dp"
+        android:layout_marginBottom="16dp"
+        android:nestedScrollingEnabled="true" />
 
     <!-- Divider -->
     <View
@@ -173,14 +190,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/cancel" />
-
-        <Button
-            android:id="@+id/btnGateway"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/open_gateway" />
 
     </LinearLayout>
 

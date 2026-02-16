@@ -8,6 +8,7 @@ A lightweight HTTP server that provides session status information for the Zelli
 - Tracks Claude Code activity status per session
 - Reports git branch status (merged to dev, remote branch exists)
 - Auto-starts on macOS via LaunchAgent
+- **HTTPS support via Tailscale** for secure remote access
 
 ## Components
 
@@ -149,7 +150,31 @@ launchctl load ~/Library/LaunchAgents/com.zellijconnect.session-status-server.pl
 curl http://localhost:7601/api/health
 ```
 
-### 5. Configure Zellij Scroll Keybindings
+### 5. Configure Tailscale HTTPS (Automatic)
+
+The installer automatically runs:
+```bash
+tailscale serve --bg --https 7601 http://localhost:7601
+```
+
+To manually configure or verify:
+```bash
+# View current Tailscale serve config
+tailscale serve status
+
+# Manually add HTTPS proxy (if needed)
+tailscale serve --bg --https 7601 http://localhost:7601
+
+# Remove HTTPS proxy
+tailscale serve --https=7601 off
+```
+
+Your session API will be available at:
+```
+https://your-tailscale-hostname:7601/api/sessions
+```
+
+### 6. Configure Zellij Scroll Keybindings
 
 Add to `~/.config/zellij/config.kdl`:
 
@@ -165,7 +190,7 @@ keybinds {
 ## Manual Start/Stop
 
 ```bash
-# Start manually
+# Start manually (HTTP only, no Tailscale)
 python3 /usr/local/bin/session-status-server.py
 
 # Stop the LaunchAgent
@@ -177,6 +202,10 @@ launchctl load ~/Library/LaunchAgents/com.zellijconnect.session-status-server.pl
 # View logs
 tail -f /tmp/session-status-server.log
 tail -f /tmp/session-status-server.error.log
+
+# Restart Tailscale serve (if connection issues)
+tailscale serve --https=7601 off
+tailscale serve --bg --https 7601 http://localhost:7601
 ```
 
 ## Testing

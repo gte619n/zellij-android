@@ -62,6 +62,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     private RecyclerView tabStrip;
     private boolean isImmersive;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Runnable connectingTimeout = () -> connectingIndicator.setVisibility(View.GONE);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,7 +113,6 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         Button btnRetry = findViewById(R.id.btnRetry);
         Button btnEscape = findViewById(R.id.btnEscape);
         ImageButton btnAddTab = findViewById(R.id.btnAddTab);
-        ImageButton btnOpenBrowser = findViewById(R.id.btnOpenBrowser);
         ImageButton btnSettings = findViewById(R.id.btnSettings);
         ImageButton btnToggleImmersive = findViewById(R.id.btnToggleImmersive);
 
@@ -145,6 +145,9 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                 TabManager.Tab active = tabManager.getActiveTab();
                 if (active != null && active.id.equals(tabId)) {
                     connectingIndicator.setVisibility(View.VISIBLE);
+                    // Safety timeout: hide indicator after 10 seconds regardless
+                    connectingIndicator.removeCallbacks(connectingTimeout);
+                    connectingIndicator.postDelayed(connectingTimeout, 10000);
                 }
             }
 
@@ -157,10 +160,8 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
             @Override
             public void onTerminalReady(String tabId) {
                 // Terminal has content and is ready for interaction
-                TabManager.Tab active = tabManager.getActiveTab();
-                if (active != null && active.id.equals(tabId)) {
-                    connectingIndicator.setVisibility(View.GONE);
-                }
+                connectingIndicator.setVisibility(View.GONE);
+                connectingIndicator.removeCallbacks(connectingTimeout);
             }
         });
 
@@ -175,7 +176,6 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         // Button listeners
         btnEscape.setOnClickListener(v -> sendEscapeKey());
         btnAddTab.setOnClickListener(v -> showSessionPicker());
-        btnOpenBrowser.setOnClickListener(v -> openBrowser());
         btnSettings.setOnClickListener(v -> showSettings());
         btnToggleImmersive.setOnClickListener(v -> toggleImmersiveMode());
 
@@ -293,19 +293,6 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                     null
                 );
             }
-        }
-    }
-
-    private void openBrowser() {
-        // Open browser at same host but port 5173
-        String baseUrl = AppConfig.getBaseUrl(this);
-        try {
-            Uri uri = Uri.parse(baseUrl);
-            String browserUrl = uri.getScheme() + "://" + uri.getHost() + ":5173";
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(browserUrl));
-            startActivity(intent);
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to open browser", e);
         }
     }
 

@@ -149,6 +149,7 @@ The `scripts/` directory contains a session status server that provides:
 - List of active Zellij sessions via REST API
 - Claude Code activity status tracking
 - Git branch status per session
+- **HTTPS support via Tailscale** for secure access
 
 ### Quick Install (on Zellij server)
 
@@ -157,12 +158,25 @@ cd scripts/
 ./install.sh
 ```
 
+The installer automatically:
+- Installs the Python server and hooks
+- Sets up macOS LaunchAgent for auto-start
+- Configures Tailscale HTTPS proxy on port 7601
+
 See `scripts/README.md` for detailed setup instructions.
 
-### API Endpoint
+### API Endpoints
 
+**HTTPS (via Tailscale):**
 ```
-GET http://your-server:7601/api/sessions
+GET https://your-tailscale-host:7601/api/sessions
+GET https://your-tailscale-host:7601/api/health
+```
+
+**Local HTTP (testing only):**
+```
+GET http://localhost:7601/api/sessions
+GET http://localhost:7601/api/health
 ```
 
 Returns session info including Claude status and git branch info.

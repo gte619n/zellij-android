@@ -54,6 +54,21 @@ else
     echo "      Warning: Server may not be running. Check logs at /tmp/session-status-server.error.log"
 fi
 
+# Configure Tailscale HTTPS proxy
+echo ""
+echo "Configuring Tailscale HTTPS proxy..."
+if command -v tailscale >/dev/null 2>&1; then
+    tailscale serve --bg --https 7601 http://localhost:7601
+    echo "      Tailscale HTTPS configured on port 7601"
+    HOSTNAME=$(tailscale status --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'])" 2>/dev/null || echo "unknown")
+    if [ "$HOSTNAME" != "unknown" ]; then
+        echo "      Access via: https://${HOSTNAME}7601/api/sessions"
+    fi
+else
+    echo "      Warning: Tailscale not found. Install Tailscale and run:"
+    echo "               tailscale serve --bg --https 7601 http://localhost:7601"
+fi
+
 # Configure Claude Code hooks
 echo "[4/4] Configuring Claude Code hooks..."
 mkdir -p "$(dirname "$CLAUDE_SETTINGS")"

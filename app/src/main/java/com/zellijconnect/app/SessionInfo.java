@@ -12,6 +12,7 @@ public class SessionInfo {
     // Claude status
     public final String claudeStatus; // "working", "idle", "waiting", "unknown"
     public final String claudeActivity;
+    public final String claudeDescription;
 
     // Git status
     public final String gitBranch;
@@ -19,12 +20,13 @@ public class SessionInfo {
     public final boolean remoteBranchExists;
 
     public SessionInfo(String name, String workingDirectory,
-                      String claudeStatus, String claudeActivity,
+                      String claudeStatus, String claudeActivity, String claudeDescription,
                       String gitBranch, boolean mergedToDev, boolean remoteBranchExists) {
         this.name = name;
         this.workingDirectory = workingDirectory;
         this.claudeStatus = claudeStatus;
         this.claudeActivity = claudeActivity;
+        this.claudeDescription = claudeDescription;
         this.gitBranch = gitBranch;
         this.mergedToDev = mergedToDev;
         this.remoteBranchExists = remoteBranchExists;
@@ -39,9 +41,14 @@ public class SessionInfo {
             JSONObject claude = json.optJSONObject("claude");
             String claudeStatus = "unknown";
             String claudeActivity = null;
+            String claudeDescription = null;
             if (claude != null) {
                 claudeStatus = claude.optString("status", "unknown");
                 claudeActivity = claude.optString("activity", null);
+                String desc = claude.optString("description", null);
+                if (desc != null && !desc.equals("null") && !desc.isEmpty()) {
+                    claudeDescription = desc;
+                }
             }
 
             // Parse git status
@@ -56,10 +63,10 @@ public class SessionInfo {
             }
 
             return new SessionInfo(name, workingDirectory,
-                                  claudeStatus, claudeActivity,
+                                  claudeStatus, claudeActivity, claudeDescription,
                                   gitBranch, mergedToDev, remoteBranchExists);
         } catch (Exception e) {
-            return new SessionInfo("error", null, "unknown", null, null, false, false);
+            return new SessionInfo("error", null, "unknown", null, null, null, false, false);
         }
     }
 }
