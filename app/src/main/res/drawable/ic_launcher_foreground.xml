@@ -4,17 +4,37 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Terminal-style tile mosaic icon -->
-    <!-- Background grid (Zellij tile motif) -->
+
+    <!-- Abstract flowing shape 1 - Cyan/Teal -->
+    <path
+        android:fillColor="#00D9FF"
+        android:pathData="M28,38 Q38,28 54,32 Q62,34 58,48 Q54,62 42,58 Q30,54 28,38Z" />
+
+    <!-- Abstract flowing shape 2 - Purple -->
+    <path
+        android:fillColor="#A855F7"
+        android:pathData="M50,44 Q66,38 76,52 Q82,64 70,74 Q58,80 48,70 Q42,58 50,44Z" />
+
+    <!-- Abstract flowing shape 3 - Orange/Coral -->
+    <path
+        android:fillColor="#FF6B35"
+        android:pathData="M34,56 Q28,68 38,78 Q50,86 60,76 Q54,66 44,62 Q36,60 34,56Z" />
+
+    <!-- Overlay glow effect - lighter cyan -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M30,30h18v18H30zM52,30h18v18H52zM30,52h18v18H30zM52,52h18v18H52z"
-        android:fillAlpha="0.3" />
-    <!-- Terminal prompt -->
+        android:fillAlpha="0.3"
+        android:pathData="M32,42 Q40,34 52,38 Q56,40 54,50 Q50,56 42,54 Q34,50 32,42Z" />
+
+    <!-- Terminal cursor block - white with slight transparency -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M36,56l6,-6l-6,-6l2.5,-2.5L47,50l-8.5,8.5z" />
+        android:pathData="M52,52h8v12h-8z" />
+
+    <!-- Small accent dot -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M50,58h16v3H50z" />
+        android:fillAlpha="0.6"
+        android:pathData="M70,42 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0" />
+
 </vector>

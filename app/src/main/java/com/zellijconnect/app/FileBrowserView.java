@@ -49,6 +49,7 @@ public class FileBrowserView extends FrameLayout {
     private String currentPath;
     private String host;
     private int port;
+    private String homeDirectory;
     private boolean viewingFile;
     private Parcelable pendingScrollState;
 
@@ -100,11 +101,12 @@ public class FileBrowserView extends FrameLayout {
     /**
      * Configure and start browsing.
      */
-    public void setup(SftpManager sftpManager, String host, int port, String initialPath) {
+    public void setup(SftpManager sftpManager, String host, int port, String initialPath, String homeDirectory) {
         this.sftpManager = sftpManager;
         this.host = host;
         this.port = port;
-        Log.d(TAG, "FileBrowserView.setup: host=" + host + ", port=" + port + ", initialPath=" + initialPath);
+        this.homeDirectory = homeDirectory;
+        Log.d(TAG, "FileBrowserView.setup: host=" + host + ", port=" + port + ", initialPath=" + initialPath + ", home=" + homeDirectory);
         navigateTo(initialPath);
     }
 
@@ -251,11 +253,22 @@ public class FileBrowserView extends FrameLayout {
     private void updateBreadcrumb(String path) {
         breadcrumbContainer.removeAllViews();
 
-        String[] segments = path.split("/");
-        StringBuilder accumulated = new StringBuilder();
+        // Check if path starts with home directory - show as ~
+        String displayPath = path;
+        boolean startsWithHome = homeDirectory != null && path.startsWith(homeDirectory);
+        if (startsWithHome) {
+            displayPath = "~" + path.substring(homeDirectory.length());
+            // Add home "~" segment that navigates to home
+            addBreadcrumbSegment("~", homeDirectory);
+        } else {
+            // Add root "/" segment
+            addBreadcrumbSegment("/", "/");
+        }
 
-        // Add root "/"
-        addBreadcrumbSegment("/", "/");
+        // Get the part after home or root
+        String remainingPath = startsWithHome ? path.substring(homeDirectory.length()) : path;
+        String[] segments = remainingPath.split("/");
+        StringBuilder accumulated = new StringBuilder(startsWithHome ? homeDirectory : "");
 
         for (String segment : segments) {
             if (segment.isEmpty()) continue;

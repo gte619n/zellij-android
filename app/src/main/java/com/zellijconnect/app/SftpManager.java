@@ -36,7 +36,8 @@ public class SftpManager {
     private final Context context;
     private final SftpHostKeyStore hostKeyStore;
     private final Map<String, SftpConnection> connections = new HashMap<>();
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    // Use single-thread executor to prevent race conditions on shared SFTP channels
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private HostKeyCallback hostKeyCallback;
@@ -161,8 +162,11 @@ public class SftpManager {
      */
     public boolean directoryExists(String host, int port, String path) {
         try {
-            ChannelSftp channel = getOrConnect(host, port);
-            return channel.stat(path).isDir();
+            // Submit to executor to serialize with other SFTP operations
+            return executor.submit(() -> {
+                ChannelSftp channel = getOrConnect(host, port);
+                return channel.stat(path).isDir();
+            }).get();
         } catch (Exception e) {
             return false;
         }
@@ -173,8 +177,11 @@ public class SftpManager {
      */
     public String getHomeDirectory(String host, int port) {
         try {
-            ChannelSftp channel = getOrConnect(host, port);
-            return channel.getHome();
+            // Submit to executor to serialize with other SFTP operations
+            return executor.submit(() -> {
+                ChannelSftp channel = getOrConnect(host, port);
+                return channel.getHome();
+            }).get();
         } catch (Exception e) {
             Log.e(TAG, "Failed to get home directory", e);
             return null;
@@ -201,20 +208,9 @@ public class SftpManager {
         JSch jsch = new JSch();
         jsch.setHostKeyRepository(hostKeyStore);
 
-        // Check auth methods available
-        SshKeyManager keyManager = new SshKeyManager(context);
-        boolean hasKey = keyManager.hasKeyPair();
         String password = AppConfig.getSshPassword(context);
-        boolean usePassword = password != null && !password.isEmpty();
-
-        if (!hasKey && !usePassword) {
-            throw new Exception("No authentication configured. Set a password or generate an SSH key in Settings.");
-        }
-
-        // Load private key from app storage if available
-        if (hasKey) {
-            File privateKeyFile = new File(context.getFilesDir(), "ssh_ed25519");
-            jsch.addIdentity(privateKeyFile.getAbsolutePath());
+        if (password == null || password.isEmpty()) {
+            throw new Exception("No password configured. Set a password in Settings.");
         }
 
         String username = AppConfig.getSshUsername(context);
@@ -224,23 +220,16 @@ public class SftpManager {
 
         Session session = jsch.getSession(username, host, port);
         session.setConfig("StrictHostKeyChecking", "ask");
-
-        // Set auth preference: password first if available, then key
-        if (usePassword) {
-            session.setConfig("PreferredAuthentications", "password,publickey");
-            session.setPassword(password);
-        } else {
-            session.setConfig("PreferredAuthentications", "publickey");
-        }
+        session.setConfig("PreferredAuthentications", "password");
+        session.setPassword(password);
 
         final String fPassword = password;
-        final boolean fUsePassword = usePassword;
 
         // Custom UserInfo to handle host key prompts and password auth
         session.setUserInfo(new com.jcraft.jsch.UserInfo() {
             @Override public String getPassphrase() { return null; }
             @Override public String getPassword() { return fPassword; }
-            @Override public boolean promptPassword(String message) { return fUsePassword; }
+            @Override public boolean promptPassword(String message) { return true; }
             @Override public boolean promptPassphrase(String message) { return false; }
             @Override public boolean promptYesNo(String message) {
                 // Auto-accept for TOFU — the HostKeyRepository handles verification

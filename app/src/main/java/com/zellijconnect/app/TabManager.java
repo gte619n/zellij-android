@@ -43,6 +43,7 @@ public class TabManager {
         public TabType type;
         public String linkedSessionName; // For FILE_BROWSER tabs: which session this browser belongs to
         public String currentPath;       // For FILE_BROWSER tabs: current directory path
+        public String homeDirectory;     // For FILE_BROWSER tabs: user's home directory
 
         public Tab(String url) {
             this.id = UUID.randomUUID().toString();
@@ -58,11 +59,12 @@ public class TabManager {
             this.type = TabType.TERMINAL;
         }
 
-        public static Tab fileBrowser(String sessionName, String initialPath) {
+        public static Tab fileBrowser(String sessionName, String initialPath, String homeDirectory) {
             Tab tab = new Tab("");
             tab.type = TabType.FILE_BROWSER;
             tab.linkedSessionName = sessionName;
             tab.currentPath = initialPath;
+            tab.homeDirectory = homeDirectory;
             tab.label = initialPath != null ?
                 initialPath.substring(initialPath.lastIndexOf('/') + 1) : "files";
             if (tab.label.isEmpty()) tab.label = "/";
@@ -101,6 +103,8 @@ public class TabManager {
                     tab.linkedSessionName = "null".equals(linkedSession) ? null : linkedSession;
                     String currentPath = obj.optString("currentPath", null);
                     tab.currentPath = "null".equals(currentPath) ? null : currentPath;
+                    String homeDir = obj.optString("homeDirectory", null);
+                    tab.homeDirectory = "null".equals(homeDir) ? null : homeDir;
                     tabs.add(tab);
                 }
                 if (!tabs.isEmpty()) {
@@ -135,8 +139,8 @@ public class TabManager {
         return tab;
     }
 
-    public Tab addFileBrowserTab(String sessionName, String initialPath) {
-        Tab tab = Tab.fileBrowser(sessionName, initialPath);
+    public Tab addFileBrowserTab(String sessionName, String initialPath, String homeDirectory) {
+        Tab tab = Tab.fileBrowser(sessionName, initialPath, homeDirectory);
         tabs.add(tab);
         activeTabId = tab.id;
         persist();
@@ -247,6 +251,7 @@ public class TabManager {
                 obj.put("type", tab.type.name());
                 if (tab.linkedSessionName != null) obj.put("linkedSessionName", tab.linkedSessionName);
                 if (tab.currentPath != null) obj.put("currentPath", tab.currentPath);
+                if (tab.homeDirectory != null) obj.put("homeDirectory", tab.homeDirectory);
                 arr.put(obj);
             }
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

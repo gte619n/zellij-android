@@ -41,7 +41,6 @@ public class SettingsDialog extends Dialog {
     }
 
     private final SettingsListener listener;
-    private final SshKeyManager sshKeyManager;
 
     private EditText editBaseUrl;
     private EditText editMetadataPort;
@@ -51,7 +50,6 @@ public class SettingsDialog extends Dialog {
     private EditText editSshPassword;
     private Spinner spinnerTerminalIme;
     private Spinner spinnerDefaultIme;
-    private TextView txtPublicKey;
     private Button btnTestConnection;
     private TextView txtTestResult;
 
@@ -62,7 +60,6 @@ public class SettingsDialog extends Dialog {
     public SettingsDialog(@NonNull Context context, SettingsListener listener) {
         super(context);
         this.listener = listener;
-        this.sshKeyManager = new SshKeyManager(context);
     }
 
     @Override
@@ -90,10 +87,7 @@ public class SettingsDialog extends Dialog {
         editSshPassword = findViewById(R.id.editSshPassword);
         spinnerTerminalIme = findViewById(R.id.spinnerTerminalIme);
         spinnerDefaultIme = findViewById(R.id.spinnerDefaultIme);
-        txtPublicKey = findViewById(R.id.txtPublicKey);
         TextView txtAppVersion = findViewById(R.id.txtAppVersion);
-        Button btnGenerateSshKey = findViewById(R.id.btnGenerateSshKey);
-        Button btnCopyPublicKey = findViewById(R.id.btnCopyPublicKey);
         btnTestConnection = findViewById(R.id.btnTestConnection);
         txtTestResult = findViewById(R.id.txtTestResult);
         Button btnSave = findViewById(R.id.btnSettingsSave);
@@ -110,9 +104,6 @@ public class SettingsDialog extends Dialog {
         // Populate IME spinners
         populateImeSpinners(ctx);
 
-        // SSH key display
-        refreshSshKeyDisplay();
-
         // App version
         try {
             PackageInfo pInfo = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
@@ -122,8 +113,6 @@ public class SettingsDialog extends Dialog {
         }
 
         // Button listeners
-        btnGenerateSshKey.setOnClickListener(v -> generateSshKey());
-        btnCopyPublicKey.setOnClickListener(v -> copySshKey());
         btnTestConnection.setOnClickListener(v -> testConnection());
         btnSave.setOnClickListener(v -> saveSettings());
         btnCancel.setOnClickListener(v -> dismiss());
@@ -207,48 +196,12 @@ public class SettingsDialog extends Dialog {
         if (defaultIdx >= 0) spinnerDefaultIme.setSelection(defaultIdx);
     }
 
-    private void refreshSshKeyDisplay() {
-        if (sshKeyManager.hasKeyPair()) {
-            String pubKey = sshKeyManager.getPublicKeyString();
-            if (pubKey != null) {
-                txtPublicKey.setText(pubKey);
-            }
-        } else {
-            txtPublicKey.setText(R.string.no_ssh_key);
-        }
-    }
-
-    private void generateSshKey() {
-        try {
-            sshKeyManager.generateKeyPair();
-            refreshSshKeyDisplay();
-            Toast.makeText(getContext(), R.string.ssh_key_generated, Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to generate SSH key", e);
-            Toast.makeText(getContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void copySshKey() {
-        String pubKey = sshKeyManager.getPublicKeyString();
-        if (pubKey == null) {
-            Toast.makeText(getContext(), R.string.no_ssh_key, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText("SSH Public Key", pubKey));
-        Toast.makeText(getContext(), R.string.ssh_key_copied, Toast.LENGTH_SHORT).show();
-    }
-
     private void testConnection() {
         Context ctx = getContext();
 
         // Read current form values (not saved yet)
         String password = editSshPassword.getText().toString();
-        boolean usePassword = !password.isEmpty();
-        boolean hasKey = sshKeyManager.hasKeyPair();
-
-        if (!usePassword && !hasKey) {
+        if (password.isEmpty()) {
             txtTestResult.setText(R.string.sftp_no_auth);
             txtTestResult.setTextColor(ctx.getColor(com.google.android.material.R.color.design_default_color_error));
             txtTestResult.setVisibility(android.view.View.VISIBLE);
@@ -283,7 +236,6 @@ public class SettingsDialog extends Dialog {
         final int fPort = port;
         final String fUsername = username;
         final String fPassword = password;
-        final boolean fUsePassword = usePassword;
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
@@ -293,26 +245,15 @@ public class SettingsDialog extends Dialog {
                 JSch jsch = new JSch();
                 jsch.setHostKeyRepository(new SftpHostKeyStore(ctx));
 
-                // Add SSH key identity if available (used as fallback if password fails or if no password)
-                if (sshKeyManager.hasKeyPair()) {
-                    File privateKeyFile = new File(ctx.getFilesDir(), "ssh_ed25519");
-                    jsch.addIdentity(privateKeyFile.getAbsolutePath());
-                }
-
                 session = jsch.getSession(fUsername, fHost, fPort);
                 session.setConfig("StrictHostKeyChecking", "no");
-
-                if (fUsePassword) {
-                    session.setConfig("PreferredAuthentications", "password,publickey");
-                    session.setPassword(fPassword);
-                } else {
-                    session.setConfig("PreferredAuthentications", "publickey");
-                }
+                session.setConfig("PreferredAuthentications", "password");
+                session.setPassword(fPassword);
 
                 session.setUserInfo(new com.jcraft.jsch.UserInfo() {
                     @Override public String getPassphrase() { return null; }
                     @Override public String getPassword() { return fPassword; }
-                    @Override public boolean promptPassword(String m) { return fUsePassword; }
+                    @Override public boolean promptPassword(String m) { return true; }
                     @Override public boolean promptPassphrase(String m) { return false; }
                     @Override public boolean promptYesNo(String m) { return true; }
                     @Override public void showMessage(String m) {}
@@ -332,9 +273,8 @@ public class SettingsDialog extends Dialog {
 
                 final int itemCount = count;
                 final String displayHost = fHost + ":" + fPort;
-                final String authMethod = fUsePassword ? " (password)" : " (key)";
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                    txtTestResult.setText(ctx.getString(R.string.sftp_test_success, displayHost + authMethod, itemCount));
+                    txtTestResult.setText(ctx.getString(R.string.sftp_test_success, displayHost, itemCount));
                     txtTestResult.setTextColor(ctx.getColor(com.google.android.material.R.color.material_deep_teal_200));
                     btnTestConnection.setEnabled(true);
                 });

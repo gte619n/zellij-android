@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ZellijConnect</string>
+    <string name="app_name">Anvil</string>
     <string name="notification_channel_name">Active Sessions</string>
     <string name="notification_channel_description">Shows when terminal sessions are active</string>
     <string name="tab_new">New Tab</string>
@@ -41,12 +41,6 @@
     <string name="keyboard_section">Keyboard Selection</string>
     <string name="terminal_keyboard">Terminal Keyboard</string>
     <string name="default_keyboard">Default Keyboard</string>
-    <string name="ssh_section">SSH Keys</string>
-    <string name="generate_ssh_key">Generate SSH Key</string>
-    <string name="copy_public_key">Copy Public Key</string>
-    <string name="ssh_key_generated">SSH key generated</string>
-    <string name="no_ssh_key">No SSH key generated yet</string>
-    <string name="ssh_key_copied">Public key copied to clipboard</string>
     <string name="save">Save</string>
     <string name="about_section">About</string>
     <string name="app_version">Version %s</string>

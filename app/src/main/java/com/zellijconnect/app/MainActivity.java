@@ -163,8 +163,9 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
             @Override
             public void onLoadingFinished(String tabId) {
-                // Page loaded but terminal may not be ready yet
-                // Keep indicator visible until onTerminalReady is called
+                // Hide indicator when page finishes loading
+                connectingIndicator.setVisibility(View.GONE);
+                connectingIndicator.removeCallbacks(connectingTimeout);
             }
 
             @Override
@@ -441,8 +442,9 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
             final String path = initialPath;
             final String session = sessionName;
-            Log.d(TAG, "Opening file browser with path: " + path + ", session: " + session);
-            runOnUiThread(() -> tabManager.addFileBrowserTab(session, path));
+            final String homeDir = home;
+            Log.d(TAG, "Opening file browser with path: " + path + ", session: " + session + ", home: " + homeDir);
+            runOnUiThread(() -> tabManager.addFileBrowserTab(session, path, homeDir));
         });
     }
 
@@ -536,8 +538,9 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
             String host = AppConfig.getSshHost(this);
             int port = AppConfig.getSshPort(this);
             String initialPath = tab.currentPath != null ? tab.currentPath : "/";
-            Log.d(TAG, "showFileBrowserForTab: host=" + host + ", port=" + port + ", tab.currentPath=" + tab.currentPath + ", initialPath=" + initialPath);
-            browserView.setup(sftpManager, host, port, initialPath);
+            String homeDir = tab.homeDirectory;
+            Log.d(TAG, "showFileBrowserForTab: host=" + host + ", port=" + port + ", initialPath=" + initialPath + ", home=" + homeDir);
+            browserView.setup(sftpManager, host, port, initialPath, homeDir);
             fileBrowserViews.put(tab.id, browserView);
         } else {
             // Auto-refresh directory listing on tab switch
