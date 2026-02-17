@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingVertical="14dp"
+    android:paddingHorizontal="12dp"
+    android:background="?attr/selectableItemBackground">
+
+    <!-- Claude Status Icon -->
+    <ImageView
+        android:id="@+id/claudeStatusIcon"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_claude_idle"
+        tools:ignore="ContentDescription" />
+
+    <!-- Session Name -->
+    <TextView
+        android:id="@+id/sessionName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:textSize="13sp"
+        android:textColor="?attr/colorOnSurface"
+        android:fontFamily="monospace"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginEnd="12dp"
+        tools:text="my-session" />
+
+    <!-- Activity/Summary -->
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="3"
+        android:textSize="12sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginEnd="12dp"
+        tools:text="Working on feature" />
+
+    <!-- Git Status -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Git Branch -->
+        <TextView
+            android:id="@+id/gitBranch"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11sp"
+            android:textColor="?attr/colorPrimary"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:ellipsize="middle"
+            android:visibility="gone"
+            tools:text="feature/branch"
+            tools:visibility="visible" />
+
+        <!-- Merged badge -->
+        <TextView
+            android:id="@+id/mergedBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/merged"
+            android:textSize="9sp"
+            android:textColor="?attr/colorOnPrimaryContainer"
+            android:background="@drawable/badge_merged"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:layout_marginStart="6dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- Hidden: old status indicator (kept for compatibility) -->
+    <View
+        android:id="@+id/statusIndicator"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+</LinearLayout>

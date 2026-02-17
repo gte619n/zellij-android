@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    font-family: -apple-system, sans-serif;
+    color: #eee;
+  }
+  h1 { margin-bottom: 8px; }
+  p.sub { color: #888; margin-top: 0; margin-bottom: 40px; }
+  .row {
+    display: flex;
+    gap: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 48px;
+  }
+  .option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .option h3 { margin: 0; font-size: 16px; color: #ccc; }
+  .option p { margin: 0; font-size: 12px; color: #888; max-width: 200px; text-align: center; }
+  .sizes {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+  }
+  svg { border-radius: 22%; overflow: hidden; }
+  .label { font-size: 11px; color: #666; text-align: center; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Anvil Icon — Refining C</h1>
+<p class="sub">Terminal Body: cyan prompt + code lines on front face, sparks above</p>
+
+<div class="row">
+
+  <!-- C1: Brighter prompt, better line spacing, cursor -->
+  <div class="option">
+    <div class="sizes">
+      <div>
+        <svg width="180" height="180" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c1-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c1-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <!-- Front face -->
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c1-front)"/>
+          <!-- Right face -->
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c1-right)"/>
+          <!-- Top face HOT -->
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <!-- Horn -->
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <!-- Hot edge -->
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+
+          <!-- Terminal on front face: prompt + output -->
+          <!-- $ prompt -->
+          <path d="M 22,41.5 L 26,43.5 L 22,45.5" stroke="#22D3EE" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+          <!-- Command text -->
+          <line x1="29" y1="44" x2="48" y2="44" stroke="#22D3EE" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+          <!-- Blinking cursor -->
+          <rect x="50" y="42.5" width="2" height="4" rx="0.3" fill="#22D3EE" opacity="0.9"/>
+
+          <!-- Sparks -->
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+          <circle cx="68" cy="18" r="0.8" fill="#FCD34D" opacity="0.7"/>
+        </svg>
+        <div class="label">180px</div>
+      </div>
+      <div>
+        <svg width="80" height="80" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c1b-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c1b-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c1b-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c1b-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 22,41.5 L 26,43.5 L 22,45.5" stroke="#22D3EE" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+          <line x1="29" y1="44" x2="48" y2="44" stroke="#22D3EE" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+          <rect x="50" y="42.5" width="2" height="4" rx="0.3" fill="#22D3EE" opacity="0.9"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">80px</div>
+      </div>
+      <div>
+        <svg width="48" height="48" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c1c-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c1c-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c1c-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c1c-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 22,41.5 L 26,43.5 L 22,45.5" stroke="#22D3EE" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+          <line x1="29" y1="44" x2="48" y2="44" stroke="#22D3EE" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+          <rect x="50" y="42.5" width="2" height="4" rx="0.3" fill="#22D3EE" opacity="0.9"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">48px</div>
+      </div>
+    </div>
+    <h3>C1: Clean Prompt</h3>
+    <p>Single prompt line with chevron, command text, and blinking cursor. Clean and focused.</p>
+  </div>
+
+  <!-- C2: Multi-line terminal, denser -->
+  <div class="option">
+    <div class="sizes">
+      <div>
+        <svg width="180" height="180" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c2-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c2-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c2-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c2-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+
+          <!-- Terminal: multi-line -->
+          <!-- Line 1: prompt + command -->
+          <path d="M 21,40.5 L 24.5,42 L 21,43.5" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+          <line x1="27" y1="42" x2="50" y2="42" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+          <!-- Line 2: output -->
+          <line x1="21" y1="45" x2="56" y2="45" stroke="#94A3B8" stroke-width="1" stroke-linecap="round" opacity="0.35"/>
+          <!-- Line 3: second prompt, active -->
+          <path d="M 21,47.5 L 24.5,49 L 21,50.5" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+          <line x1="27" y1="49" x2="38" y2="49" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+          <!-- Cursor -->
+          <rect x="40" y="47.5" width="2" height="3.5" rx="0.3" fill="#22D3EE" opacity="0.9"/>
+
+          <!-- Sparks -->
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+          <circle cx="68" cy="18" r="0.8" fill="#FCD34D" opacity="0.7"/>
+        </svg>
+        <div class="label">180px</div>
+      </div>
+      <div>
+        <svg width="80" height="80" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c2b-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c2b-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c2b-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c2b-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 21,40.5 L 24.5,42 L 21,43.5" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+          <line x1="27" y1="42" x2="50" y2="42" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+          <line x1="21" y1="45" x2="56" y2="45" stroke="#94A3B8" stroke-width="1" stroke-linecap="round" opacity="0.35"/>
+          <path d="M 21,47.5 L 24.5,49 L 21,50.5" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+          <line x1="27" y1="49" x2="38" y2="49" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+          <rect x="40" y="47.5" width="2" height="3.5" rx="0.3" fill="#22D3EE" opacity="0.9"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">80px</div>
+      </div>
+      <div>
+        <svg width="48" height="48" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c2c-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c2c-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c2c-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c2c-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 21,40.5 L 24.5,42 L 21,43.5" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+          <line x1="27" y1="42" x2="50" y2="42" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+          <path d="M 21,47.5 L 24.5,49 L 21,50.5" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+          <rect x="27" y="47.5" width="2" height="3.5" rx="0.3" fill="#22D3EE" opacity="0.9"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">48px</div>
+      </div>
+    </div>
+    <h3>C2: Multi-line</h3>
+    <p>Two prompt lines with output between. Command history feel — previous command ran, new one typing.</p>
+  </div>
+
+</div>
+
+<div class="row">
+
+  <!-- C3: Green prompt (classic terminal) -->
+  <div class="option">
+    <div class="sizes">
+      <div>
+        <svg width="180" height="180" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c3-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c3-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c3-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c3-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+
+          <!-- Terminal: green classic -->
+          <path d="M 22,41.5 L 26,43.5 L 22,45.5" stroke="#4ADE80" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+          <line x1="29" y1="44" x2="52" y2="44" stroke="#4ADE80" stroke-width="1.3" stroke-linecap="round" opacity="0.5"/>
+          <rect x="54" y="42.5" width="2" height="4" rx="0.3" fill="#4ADE80" opacity="0.9"/>
+
+          <!-- Sparks -->
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+          <circle cx="68" cy="18" r="0.8" fill="#FCD34D" opacity="0.7"/>
+        </svg>
+        <div class="label">180px</div>
+      </div>
+      <div>
+        <svg width="80" height="80" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c3b-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c3b-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c3b-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c3b-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 22,41.5 L 26,43.5 L 22,45.5" stroke="#4ADE80" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+          <line x1="29" y1="44" x2="52" y2="44" stroke="#4ADE80" stroke-width="1.3" stroke-linecap="round" opacity="0.5"/>
+          <rect x="54" y="42.5" width="2" height="4" rx="0.3" fill="#4ADE80" opacity="0.9"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">80px</div>
+      </div>
+      <div>
+        <svg width="48" height="48" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c3c-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c3c-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c3c-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c3c-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 22,41.5 L 26,43.5 L 22,45.5" stroke="#4ADE80" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+          <line x1="29" y1="44" x2="52" y2="44" stroke="#4ADE80" stroke-width="1.3" stroke-linecap="round" opacity="0.5"/>
+          <rect x="54" y="42.5" width="2" height="4" rx="0.3" fill="#4ADE80" opacity="0.9"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">48px</div>
+      </div>
+    </div>
+    <h3>C3: Green Classic</h3>
+    <p>Classic green terminal prompt. Retro CRT feel against the forged steel body.</p>
+  </div>
+
+  <!-- C4: Embedded screen look -->
+  <div class="option">
+    <div class="sizes">
+      <div>
+        <svg width="180" height="180" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c4-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c4-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c4-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c4-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+
+          <!-- Dark screen inset on front face -->
+          <rect x="20" y="39.5" width="40" height="12" rx="1.5" fill="#0F172A" opacity="0.5"/>
+
+          <!-- Terminal lines inside screen -->
+          <path d="M 23,42 L 26.5,43.5 L 23,45" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+          <line x1="29" y1="43.5" x2="46" y2="43.5" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+          <rect x="48" y="42" width="2" height="3.5" rx="0.3" fill="#22D3EE" opacity="0.95"/>
+          <!-- Second line: faint output -->
+          <line x1="23" y1="47" x2="52" y2="47" stroke="#94A3B8" stroke-width="0.8" stroke-linecap="round" opacity="0.3"/>
+          <line x1="23" y1="49.5" x2="38" y2="49.5" stroke="#94A3B8" stroke-width="0.8" stroke-linecap="round" opacity="0.2"/>
+
+          <!-- Sparks -->
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+          <circle cx="68" cy="18" r="0.8" fill="#FCD34D" opacity="0.7"/>
+        </svg>
+        <div class="label">180px</div>
+      </div>
+      <div>
+        <svg width="80" height="80" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c4b-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c4b-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c4b-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c4b-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <rect x="20" y="39.5" width="40" height="12" rx="1.5" fill="#0F172A" opacity="0.5"/>
+          <path d="M 23,42 L 26.5,43.5 L 23,45" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+          <line x1="29" y1="43.5" x2="46" y2="43.5" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+          <rect x="48" y="42" width="2" height="3.5" rx="0.3" fill="#22D3EE" opacity="0.95"/>
+          <line x1="23" y1="47" x2="52" y2="47" stroke="#94A3B8" stroke-width="0.8" stroke-linecap="round" opacity="0.3"/>
+          <line x1="23" y1="49.5" x2="38" y2="49.5" stroke="#94A3B8" stroke-width="0.8" stroke-linecap="round" opacity="0.2"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="56" cy="16" r="1.2" fill="#FBBF24"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">80px</div>
+      </div>
+      <div>
+        <svg width="48" height="48" viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="c4c-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#64748B"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
+            <linearGradient id="c4c-right" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#334155"/></linearGradient>
+          </defs>
+          <rect width="108" height="108" fill="#0F172A"/>
+          <path d="M 17,38 L 62,38 L 62,47 L 53,47 Q 50,47 49,52 L 48,59 Q 47,64 50,65 L 66,68 L 66,86 L 14,86 L 14,68 L 30,65 Q 33,64 32,59 L 31,52 Q 30,47 28,47 L 17,47 Z" fill="url(#c4c-front)"/>
+          <path d="M 62,38 L 92,22 L 94,35 L 92,47 L 83,47 Q 80,47 79,52 L 78,59 Q 77,64 80,65 L 94,68 L 94,86 L 66,86 L 66,68 L 50,65 Q 47,64 48,59 L 49,52 Q 50,47 53,47 L 62,47 Z" fill="url(#c4c-right)"/>
+          <path d="M 17,38 L 62,38 L 92,22 L 48,22 Q 33,22 17,38 Z" fill="#F97316"/>
+          <path d="M 17,38 L 48,22 L 8,35 Z" fill="#EA580C"/>
+          <path d="M 48,22 L 92,22" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+          <rect x="20" y="39.5" width="40" height="12" rx="1.5" fill="#0F172A" opacity="0.5"/>
+          <path d="M 23,42 L 26.5,43.5 L 23,45" stroke="#22D3EE" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+          <line x1="29" y1="43.5" x2="46" y2="43.5" stroke="#22D3EE" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+          <rect x="48" y="42" width="2" height="3.5" rx="0.3" fill="#22D3EE" opacity="0.95"/>
+          <circle cx="88" cy="17" r="1.8" fill="#FCD34D"/>
+          <circle cx="78" cy="13" r="1" fill="#FEF3C7"/>
+        </svg>
+        <div class="label">48px</div>
+      </div>
+    </div>
+    <h3>C4: Inset Screen</h3>
+    <p>Dark screen recessed into the front face. Terminal runs inside the anvil body — like an embedded display.</p>
+  </div>
+
+</div>
+
+</body>
+</html>

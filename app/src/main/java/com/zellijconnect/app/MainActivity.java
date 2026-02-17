@@ -122,6 +122,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         Button btnEscape = findViewById(R.id.btnEscape);
         ImageButton btnAddTab = findViewById(R.id.btnAddTab);
         ImageButton btnFileBrowser = findViewById(R.id.btnFileBrowser);
+        ImageButton btnOpenBrowser = findViewById(R.id.btnOpenBrowser);
         ImageButton btnSettings = findViewById(R.id.btnSettings);
         ImageButton btnToggleImmersive = findViewById(R.id.btnToggleImmersive);
 
@@ -188,6 +189,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         btnEscape.setOnClickListener(v -> sendEscapeKey());
         btnAddTab.setOnClickListener(v -> showSessionPicker());
         btnFileBrowser.setOnClickListener(v -> openFileBrowser());
+        btnOpenBrowser.setOnClickListener(v -> openBrowser());
         btnSettings.setOnClickListener(v -> showSettings());
         btnToggleImmersive.setOnClickListener(v -> toggleImmersiveMode());
 
@@ -401,6 +403,18 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                 });
             }
         });
+    }
+
+    private void openBrowser() {
+        String baseUrl = AppConfig.getBaseUrl(this);
+        try {
+            Uri uri = Uri.parse(baseUrl);
+            String browserUrl = uri.getScheme() + "://" + uri.getHost() + ":5173";
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(browserUrl));
+            startActivity(intent);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to open browser", e);
+        }
     }
 
     private void openFileBrowser() {

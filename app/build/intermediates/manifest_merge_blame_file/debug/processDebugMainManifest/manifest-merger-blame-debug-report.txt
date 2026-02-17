@@ -1,0 +1,210 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.zellijconnect.app"
+4    android:versionCode="1"
+5    android:versionName="1.0.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="35"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:5:5-67
+11-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:5:22-64
+12    <uses-permission android:name="android.permission.WAKE_LOCK" />
+12-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:6:5-68
+12-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:6:22-65
+13    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+13-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:7:5-77
+13-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:7:22-74
+14    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+14-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:8:5-89
+14-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:8:22-86
+15    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+15-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:9:5-77
+15-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:9:22-74
+16    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+16-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:10:5-11:47
+16-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:10:22-77
+17
+18    <uses-feature
+18-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:13:5-92
+19        android:name="android.software.input_methods"
+19-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:13:19-64
+20        android:required="false" />
+20-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:13:65-89
+21
+22    <!-- Query all input method packages (Android 11+ package visibility) -->
+23    <queries>
+23-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:16:5-20:15
+24        <intent>
+24-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:17:9-19:18
+25            <action android:name="android.view.InputMethod" />
+25-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:18:13-63
+25-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:18:21-60
+26        </intent>
+27    </queries>
+28
+29    <permission
+29-->[androidx.core:core:1.15.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/8ad2ed1cf83e30168ae442c67430bf72/transformed/core-1.15.0/AndroidManifest.xml:22:5-24:47
+30        android:name="com.zellijconnect.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+30-->[androidx.core:core:1.15.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/8ad2ed1cf83e30168ae442c67430bf72/transformed/core-1.15.0/AndroidManifest.xml:23:9-81
+31        android:protectionLevel="signature" />
+31-->[androidx.core:core:1.15.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/8ad2ed1cf83e30168ae442c67430bf72/transformed/core-1.15.0/AndroidManifest.xml:24:9-44
+32
+33    <uses-permission android:name="com.zellijconnect.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+33-->[androidx.core:core:1.15.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/8ad2ed1cf83e30168ae442c67430bf72/transformed/core-1.15.0/AndroidManifest.xml:26:5-97
+33-->[androidx.core:core:1.15.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/8ad2ed1cf83e30168ae442c67430bf72/transformed/core-1.15.0/AndroidManifest.xml:26:22-94
+34
+35    <application
+35-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:22:5-67:19
+36        android:allowBackup="false"
+36-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:23:9-36
+37        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+37-->[androidx.core:core:1.15.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/8ad2ed1cf83e30168ae442c67430bf72/transformed/core-1.15.0/AndroidManifest.xml:28:18-86
+38        android:debuggable="true"
+39        android:extractNativeLibs="false"
+40        android:icon="@mipmap/ic_launcher"
+40-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:24:9-43
+41        android:label="@string/app_name"
+41-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:25:9-41
+42        android:networkSecurityConfig="@xml/network_security_config"
+42-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:29:9-69
+43        android:supportsRtl="true"
+43-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:26:9-35
+44        android:theme="@style/Theme.ZellijConnect"
+44-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:27:9-51
+45        android:usesCleartextTraffic="true" >
+45-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:28:9-44
+46        <activity
+46-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:31:9-34:58
+47            android:name="com.zellijconnect.app.SetupGuideActivity"
+47-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:32:13-47
+48            android:exported="false"
+48-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:33:13-37
+49            android:theme="@style/Theme.ZellijConnect" />
+49-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:34:13-55
+50        <activity
+50-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:36:9-46:20
+51            android:name="com.zellijconnect.app.MainActivity"
+51-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:37:13-41
+52            android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation"
+52-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:40:13-115
+53            android:exported="true"
+53-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:38:13-36
+54            android:launchMode="singleTask"
+54-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:41:13-44
+55            android:windowSoftInputMode="adjustResize" >
+55-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:39:13-55
+56            <intent-filter>
+56-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:42:13-45:29
+57                <action android:name="android.intent.action.MAIN" />
+57-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:43:17-69
+57-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:43:25-66
+58
+59                <category android:name="android.intent.category.LAUNCHER" />
+59-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:44:17-77
+59-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:44:27-74
+60            </intent-filter>
+61        </activity>
+62
+63        <service
+63-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:48:9-55:19
+64            android:name="com.zellijconnect.app.KeepAliveService"
+64-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:49:13-45
+65            android:exported="false"
+65-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:51:13-37
+66            android:foregroundServiceType="specialUse" >
+66-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:50:13-55
+67            <property
+67-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:52:13-54:111
+68                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+68-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:53:17-76
+69                android:value="Keeping terminal WebSocket connections alive to prevent session disconnects" />
+69-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:54:17-108
+70        </service>
+71
+72        <provider
+73            android:name="androidx.core.content.FileProvider"
+73-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:58:13-62
+74            android:authorities="com.zellijconnect.app.fileprovider"
+74-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:59:13-64
+75            android:exported="false"
+75-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:60:13-37
+76            android:grantUriPermissions="true" >
+76-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:61:13-47
+77            <meta-data
+77-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:62:13-64:54
+78                android:name="android.support.FILE_PROVIDER_PATHS"
+78-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:63:17-67
+79                android:resource="@xml/file_paths" />
+79-->/Users/gte619n/Development/zellij-android/app/src/main/AndroidManifest.xml:64:17-51
+80        </provider>
+81        <provider
+81-->[androidx.emoji2:emoji2:1.3.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/f80625029a223ca1f6446085fe87fb4d/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+82            android:name="androidx.startup.InitializationProvider"
+82-->[androidx.emoji2:emoji2:1.3.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/f80625029a223ca1f6446085fe87fb4d/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
+83            android:authorities="com.zellijconnect.app.androidx-startup"
+83-->[androidx.emoji2:emoji2:1.3.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/f80625029a223ca1f6446085fe87fb4d/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
+84            android:exported="false" >
+84-->[androidx.emoji2:emoji2:1.3.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/f80625029a223ca1f6446085fe87fb4d/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
+85            <meta-data
+85-->[androidx.emoji2:emoji2:1.3.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/f80625029a223ca1f6446085fe87fb4d/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+86                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+86-->[androidx.emoji2:emoji2:1.3.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/f80625029a223ca1f6446085fe87fb4d/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+87                android:value="androidx.startup" />
+87-->[androidx.emoji2:emoji2:1.3.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/f80625029a223ca1f6446085fe87fb4d/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+88            <meta-data
+88-->[androidx.lifecycle:lifecycle-process:2.6.2] /Users/gte619n/.gradle/caches/8.11.1/transforms/2c0e5ce565d75bfa22b96df232c96979/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:29:13-31:52
+89                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+89-->[androidx.lifecycle:lifecycle-process:2.6.2] /Users/gte619n/.gradle/caches/8.11.1/transforms/2c0e5ce565d75bfa22b96df232c96979/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:30:17-78
+90                android:value="androidx.startup" />
+90-->[androidx.lifecycle:lifecycle-process:2.6.2] /Users/gte619n/.gradle/caches/8.11.1/transforms/2c0e5ce565d75bfa22b96df232c96979/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:31:17-49
+91            <meta-data
+91-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:29:13-31:52
+92                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+92-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:30:17-85
+93                android:value="androidx.startup" />
+93-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:31:17-49
+94        </provider>
+95
+96        <receiver
+96-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:34:9-52:20
+97            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+97-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:35:13-76
+98            android:directBootAware="false"
+98-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:36:13-44
+99            android:enabled="true"
+99-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:37:13-35
+100            android:exported="true"
+100-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:38:13-36
+101            android:permission="android.permission.DUMP" >
+101-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:39:13-57
+102            <intent-filter>
+102-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:40:13-42:29
+103                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+103-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:17-91
+103-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:25-88
+104            </intent-filter>
+105            <intent-filter>
+105-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:43:13-45:29
+106                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+106-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:17-85
+106-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:25-82
+107            </intent-filter>
+108            <intent-filter>
+108-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:46:13-48:29
+109                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+109-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:17-88
+109-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:25-85
+110            </intent-filter>
+111            <intent-filter>
+111-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:49:13-51:29
+112                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+112-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:17-95
+112-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/gte619n/.gradle/caches/8.11.1/transforms/886b288ec9f992e5fb194b0846fae190/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:25-92
+113            </intent-filter>
+114        </receiver>
+115    </application>
+116
+117</manifest>
