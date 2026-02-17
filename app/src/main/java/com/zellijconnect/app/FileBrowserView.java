@@ -104,6 +104,7 @@ public class FileBrowserView extends FrameLayout {
         this.sftpManager = sftpManager;
         this.host = host;
         this.port = port;
+        Log.d(TAG, "FileBrowserView.setup: host=" + host + ", port=" + port + ", initialPath=" + initialPath);
         navigateTo(initialPath);
     }
 
@@ -191,6 +192,7 @@ public class FileBrowserView extends FrameLayout {
     }
 
     private void loadDirectory(String path) {
+        Log.d(TAG, "loadDirectory: path=" + path + ", host=" + host + ", port=" + port);
         showLoading();
 
         sftpManager.listDirectory(host, port, path, new SftpManager.ListCallback() {

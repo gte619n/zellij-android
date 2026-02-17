@@ -8,8 +8,10 @@ import android.content.pm.PackageInfo;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Window;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.provider.Settings;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -46,6 +48,7 @@ public class SettingsDialog extends Dialog {
     private EditText editAuthToken;
     private EditText editSshPort;
     private EditText editSshUsername;
+    private EditText editSshPassword;
     private Spinner spinnerTerminalIme;
     private Spinner spinnerDefaultIme;
     private TextView txtPublicKey;
@@ -68,6 +71,14 @@ public class SettingsDialog extends Dialog {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.dialog_settings);
 
+        // Set dialog width to 90% of screen width
+        Window window = getWindow();
+        if (window != null) {
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.width = (int) (getContext().getResources().getDisplayMetrics().widthPixels * 0.9);
+            window.setAttributes(params);
+        }
+
         Context ctx = getContext();
 
         // Find views
@@ -76,6 +87,7 @@ public class SettingsDialog extends Dialog {
         editAuthToken = findViewById(R.id.editAuthToken);
         editSshPort = findViewById(R.id.editSshPort);
         editSshUsername = findViewById(R.id.editSshUsername);
+        editSshPassword = findViewById(R.id.editSshPassword);
         spinnerTerminalIme = findViewById(R.id.spinnerTerminalIme);
         spinnerDefaultIme = findViewById(R.id.spinnerDefaultIme);
         txtPublicKey = findViewById(R.id.txtPublicKey);
@@ -93,6 +105,7 @@ public class SettingsDialog extends Dialog {
         editAuthToken.setText(AppConfig.getZellijToken(ctx));
         editSshPort.setText(String.valueOf(AppConfig.getSshPort(ctx)));
         editSshUsername.setText(AppConfig.getSshUsername(ctx));
+        editSshPassword.setText(AppConfig.getSshPassword(ctx));
 
         // Populate IME spinners
         populateImeSpinners(ctx);
@@ -122,9 +135,58 @@ public class SettingsDialog extends Dialog {
         imeLabels = new ArrayList<>();
         imeIds = new ArrayList<>();
 
+        Log.d(TAG, "Found " + enabledImes.size() + " enabled IMEs:");
         for (InputMethodInfo imi : enabledImes) {
-            imeLabels.add(imi.loadLabel(ctx.getPackageManager()).toString());
-            imeIds.add(imi.getId());
+            String label = imi.loadLabel(ctx.getPackageManager()).toString();
+            String id = imi.getId();
+            Log.d(TAG, "  IME: " + label + " -> " + id);
+            imeLabels.add(label);
+            imeIds.add(id);
+        }
+
+        // Also check app's configured default IME - Samsung devices may not include GBoard in enabled list
+        // even though it's installed and usable
+        List<InputMethodInfo> allImes = imm.getInputMethodList();
+        String configuredDefault = AppConfig.getDefaultImeId(ctx);
+        Log.d(TAG, "App configured default IME: " + configuredDefault + ", in list: " + imeIds.contains(configuredDefault));
+
+        // Add any installed IME that's not in the enabled list (for both configured defaults)
+        for (String imeToCheck : new String[]{configuredDefault, AppConfig.getTerminalImeId(ctx)}) {
+            if (imeToCheck != null && !imeToCheck.isEmpty() && !imeIds.contains(imeToCheck)) {
+                for (InputMethodInfo imi : allImes) {
+                    if (imi.getId().equals(imeToCheck)) {
+                        String label = imi.loadLabel(ctx.getPackageManager()).toString();
+                        imeLabels.add(label);
+                        imeIds.add(imeToCheck);
+                        Log.d(TAG, "Added missing IME: " + label + " -> " + imeToCheck);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Samsung randomly hides keyboards from InputMethodManager APIs
+        // Check if common keyboards are installed and add them manually if needed
+        String[][] knownKeyboards = {
+            {"com.google.android.inputmethod.latin", "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME", "Gboard"},
+            {"juloo.keyboard2", "juloo.keyboard2/.Keyboard2", "Unexpected Keyboard"},
+        };
+        for (String[] kb : knownKeyboards) {
+            String packageName = kb[0];
+            String imeId = kb[1];
+            String label = kb[2];
+            Log.d(TAG, "Checking keyboard: " + label + " (package=" + packageName + ", id=" + imeId + ")");
+            Log.d(TAG, "  Already in list: " + imeIds.contains(imeId));
+            if (!imeIds.contains(imeId)) {
+                try {
+                    ctx.getPackageManager().getPackageInfo(packageName, 0);
+                    imeLabels.add(label);
+                    imeIds.add(imeId);
+                    Log.d(TAG, "  Added " + label + " manually");
+                } catch (Exception e) {
+                    Log.d(TAG, "  Package not found: " + e.getMessage());
+                }
+            }
         }
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(ctx,
@@ -181,14 +243,18 @@ public class SettingsDialog extends Dialog {
     private void testConnection() {
         Context ctx = getContext();
 
-        if (!sshKeyManager.hasKeyPair()) {
-            txtTestResult.setText(R.string.sftp_no_key);
+        // Read current form values (not saved yet)
+        String password = editSshPassword.getText().toString();
+        boolean usePassword = !password.isEmpty();
+        boolean hasKey = sshKeyManager.hasKeyPair();
+
+        if (!usePassword && !hasKey) {
+            txtTestResult.setText(R.string.sftp_no_auth);
             txtTestResult.setTextColor(ctx.getColor(com.google.android.material.R.color.design_default_color_error));
             txtTestResult.setVisibility(android.view.View.VISIBLE);
             return;
         }
 
-        // Read current form values (not saved yet)
         String baseUrl = editBaseUrl.getText().toString().trim();
         String host;
         try {
@@ -216,6 +282,8 @@ public class SettingsDialog extends Dialog {
         final String fHost = host;
         final int fPort = port;
         final String fUsername = username;
+        final String fPassword = password;
+        final boolean fUsePassword = usePassword;
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
@@ -225,16 +293,26 @@ public class SettingsDialog extends Dialog {
                 JSch jsch = new JSch();
                 jsch.setHostKeyRepository(new SftpHostKeyStore(ctx));
 
-                File privateKeyFile = new File(ctx.getFilesDir(), "ssh_ed25519");
-                jsch.addIdentity(privateKeyFile.getAbsolutePath());
+                // Add SSH key identity if available (used as fallback if password fails or if no password)
+                if (sshKeyManager.hasKeyPair()) {
+                    File privateKeyFile = new File(ctx.getFilesDir(), "ssh_ed25519");
+                    jsch.addIdentity(privateKeyFile.getAbsolutePath());
+                }
 
                 session = jsch.getSession(fUsername, fHost, fPort);
                 session.setConfig("StrictHostKeyChecking", "no");
-                session.setConfig("PreferredAuthentications", "publickey");
+
+                if (fUsePassword) {
+                    session.setConfig("PreferredAuthentications", "password,publickey");
+                    session.setPassword(fPassword);
+                } else {
+                    session.setConfig("PreferredAuthentications", "publickey");
+                }
+
                 session.setUserInfo(new com.jcraft.jsch.UserInfo() {
                     @Override public String getPassphrase() { return null; }
-                    @Override public String getPassword() { return null; }
-                    @Override public boolean promptPassword(String m) { return false; }
+                    @Override public String getPassword() { return fPassword; }
+                    @Override public boolean promptPassword(String m) { return fUsePassword; }
                     @Override public boolean promptPassphrase(String m) { return false; }
                     @Override public boolean promptYesNo(String m) { return true; }
                     @Override public void showMessage(String m) {}
@@ -254,8 +332,9 @@ public class SettingsDialog extends Dialog {
 
                 final int itemCount = count;
                 final String displayHost = fHost + ":" + fPort;
+                final String authMethod = fUsePassword ? " (password)" : " (key)";
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                    txtTestResult.setText(ctx.getString(R.string.sftp_test_success, displayHost, itemCount));
+                    txtTestResult.setText(ctx.getString(R.string.sftp_test_success, displayHost + authMethod, itemCount));
                     txtTestResult.setTextColor(ctx.getColor(com.google.android.material.R.color.material_deep_teal_200));
                     btnTestConnection.setEnabled(true);
                 });
@@ -305,6 +384,9 @@ public class SettingsDialog extends Dialog {
 
         String sshUsername = editSshUsername.getText().toString().trim();
         AppConfig.setSshUsername(ctx, sshUsername);
+
+        String sshPassword = editSshPassword.getText().toString();
+        AppConfig.setSshPassword(ctx, sshPassword);
 
         // Keyboard config
         int terminalPos = spinnerTerminalIme.getSelectedItemPosition();

@@ -55,6 +55,8 @@
     <string name="sftp_section">SFTP Connection</string>
     <string name="ssh_port">SSH Port</string>
     <string name="ssh_username">SSH Username</string>
+    <string name="ssh_password">SSH Password (optional)</string>
+    <string name="ssh_auth_hint">Password is used if set; otherwise SSH key is used</string>
 
     <!-- File Browser -->
     <string name="file_browser">File Browser</string>
@@ -63,6 +65,7 @@
     <string name="sftp_reconnecting">Reconnecting\u2026</string>
     <string name="sftp_error">SFTP connection failed</string>
     <string name="sftp_no_key">Generate an SSH key in Settings first</string>
+    <string name="sftp_no_auth">Enter a password or generate an SSH key</string>
     <string name="sftp_host_key_changed">Server identity has changed! This could indicate a security threat.</string>
     <string name="sftp_host_key_accept">Accept &amp; Connect</string>
     <string name="sftp_host_key_reject">Cancel</string>

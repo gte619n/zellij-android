@@ -157,6 +157,31 @@ public class SftpManager {
     }
 
     /**
+     * Check if a path exists and is a directory (blocking, call from background thread).
+     */
+    public boolean directoryExists(String host, int port, String path) {
+        try {
+            ChannelSftp channel = getOrConnect(host, port);
+            return channel.stat(path).isDir();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get the home directory for the current user (blocking, call from background thread).
+     */
+    public String getHomeDirectory(String host, int port) {
+        try {
+            ChannelSftp channel = getOrConnect(host, port);
+            return channel.getHome();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to get home directory", e);
+            return null;
+        }
+    }
+
+    /**
      * Get or establish an SFTP connection for the given host.
      */
     private synchronized ChannelSftp getOrConnect(String host, int port) throws Exception {
@@ -176,14 +201,21 @@ public class SftpManager {
         JSch jsch = new JSch();
         jsch.setHostKeyRepository(hostKeyStore);
 
-        // Load private key from app storage
+        // Check auth methods available
         SshKeyManager keyManager = new SshKeyManager(context);
-        if (!keyManager.hasKeyPair()) {
-            throw new Exception("No SSH key generated. Please generate one in Settings.");
+        boolean hasKey = keyManager.hasKeyPair();
+        String password = AppConfig.getSshPassword(context);
+        boolean usePassword = password != null && !password.isEmpty();
+
+        if (!hasKey && !usePassword) {
+            throw new Exception("No authentication configured. Set a password or generate an SSH key in Settings.");
         }
 
-        File privateKeyFile = new File(context.getFilesDir(), "ssh_ed25519");
-        jsch.addIdentity(privateKeyFile.getAbsolutePath());
+        // Load private key from app storage if available
+        if (hasKey) {
+            File privateKeyFile = new File(context.getFilesDir(), "ssh_ed25519");
+            jsch.addIdentity(privateKeyFile.getAbsolutePath());
+        }
 
         String username = AppConfig.getSshUsername(context);
         if (username.isEmpty()) {
@@ -192,13 +224,23 @@ public class SftpManager {
 
         Session session = jsch.getSession(username, host, port);
         session.setConfig("StrictHostKeyChecking", "ask");
-        session.setConfig("PreferredAuthentications", "publickey");
 
-        // Custom UserInfo to handle host key prompts
+        // Set auth preference: password first if available, then key
+        if (usePassword) {
+            session.setConfig("PreferredAuthentications", "password,publickey");
+            session.setPassword(password);
+        } else {
+            session.setConfig("PreferredAuthentications", "publickey");
+        }
+
+        final String fPassword = password;
+        final boolean fUsePassword = usePassword;
+
+        // Custom UserInfo to handle host key prompts and password auth
         session.setUserInfo(new com.jcraft.jsch.UserInfo() {
             @Override public String getPassphrase() { return null; }
-            @Override public String getPassword() { return null; }
-            @Override public boolean promptPassword(String message) { return false; }
+            @Override public String getPassword() { return fPassword; }
+            @Override public boolean promptPassword(String message) { return fUsePassword; }
             @Override public boolean promptPassphrase(String message) { return false; }
             @Override public boolean promptYesNo(String message) {
                 // Auto-accept for TOFU — the HostKeyRepository handles verification

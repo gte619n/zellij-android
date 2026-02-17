@@ -88,15 +88,19 @@ public class TabManager {
                 JSONArray arr = new JSONArray(tabsJson);
                 for (int i = 0; i < arr.length(); i++) {
                     JSONObject obj = arr.getJSONObject(i);
+                    String label = obj.getString("label");
+                    if ("null".equals(label)) label = "/";
                     Tab tab = new Tab(
                         obj.getString("id"),
                         obj.getString("url"),
-                        obj.getString("label")
+                        label
                     );
                     String typeStr = obj.optString("type", "TERMINAL");
                     tab.type = "FILE_BROWSER".equals(typeStr) ? TabType.FILE_BROWSER : TabType.TERMINAL;
-                    tab.linkedSessionName = obj.optString("linkedSessionName", null);
-                    tab.currentPath = obj.optString("currentPath", null);
+                    String linkedSession = obj.optString("linkedSessionName", null);
+                    tab.linkedSessionName = "null".equals(linkedSession) ? null : linkedSession;
+                    String currentPath = obj.optString("currentPath", null);
+                    tab.currentPath = "null".equals(currentPath) ? null : currentPath;
                     tabs.add(tab);
                 }
                 if (!tabs.isEmpty()) {

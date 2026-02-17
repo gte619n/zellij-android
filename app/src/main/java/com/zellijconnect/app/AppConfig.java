@@ -92,6 +92,19 @@ public final class AppConfig {
         getPrefs(ctx).edit().putString("ssh_username", username).apply();
     }
 
+    public static String getSshPassword(Context ctx) {
+        return getPrefs(ctx).getString("ssh_password", "");
+    }
+
+    public static void setSshPassword(Context ctx, String password) {
+        getPrefs(ctx).edit().putString("ssh_password", password).apply();
+    }
+
+    public static boolean hasSshPassword(Context ctx) {
+        String password = getSshPassword(ctx);
+        return password != null && !password.isEmpty();
+    }
+
     public static String getSshHost(Context ctx) {
         try {
             android.net.Uri uri = android.net.Uri.parse(getBaseUrl(ctx));

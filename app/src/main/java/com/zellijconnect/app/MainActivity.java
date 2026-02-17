@@ -403,55 +403,46 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     }
 
     private void openFileBrowser() {
-        // Fetch sessions to find CWD, then open browser tab
+        // Determine best starting path for file browser
         executor.execute(() -> {
+            String sessionName = deriveSessionName();
+            String host = AppConfig.getSshHost(this);
+            int port = AppConfig.getSshPort(this);
+
+            // Get home directory from SFTP
+            String home = sftpManager.getHomeDirectory(host, port);
+            if (home == null) home = "/";
+
             String initialPath = "/";
-            try {
-                TabManager.Tab active = tabManager.getActiveTab();
-                if (active != null && active.type == TabManager.TabType.TERMINAL) {
-                    Uri baseUri = Uri.parse(AppConfig.getBaseUrl(this));
-                    int metadataPort = AppConfig.getMetadataPort(this);
-                    String apiUrl = "https://" + baseUri.getHost() + ":" + metadataPort + "/api/sessions";
 
-                    URL url = new URL(apiUrl);
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestMethod("GET");
-                    conn.setConnectTimeout(3000);
-                    conn.setReadTimeout(3000);
-
-                    if (conn.getResponseCode() == 200) {
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                        StringBuilder response = new StringBuilder();
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            response.append(line);
-                        }
-                        reader.close();
-
-                        JSONObject json = new JSONObject(response.toString());
-                        JSONArray sessionArray = json.getJSONArray("sessions");
-
-                        for (int i = 0; i < sessionArray.length(); i++) {
-                            JSONObject s = sessionArray.getJSONObject(i);
-                            String sessionName = s.optString("name", "");
-                            if (active.url != null && active.url.contains("/" + sessionName)) {
-                                String cwd = s.optString("workingDirectory", "");
-                                if (!cwd.isEmpty()) {
-                                    initialPath = cwd;
-                                }
-                                break;
-                            }
-                        }
+            // Try preferred path: ~/oxos/bots/.worktrees/{session_name}
+            if (sessionName != null && !sessionName.equals("files")) {
+                String worktreePath = home + "/oxos/bots/.worktrees/" + sessionName;
+                if (sftpManager.directoryExists(host, port, worktreePath)) {
+                    initialPath = worktreePath;
+                    Log.d(TAG, "Using worktree path: " + initialPath);
+                } else {
+                    // Fallback: ~/oxos/bots
+                    String botsPath = home + "/oxos/bots";
+                    if (sftpManager.directoryExists(host, port, botsPath)) {
+                        initialPath = botsPath;
+                        Log.d(TAG, "Using bots path: " + initialPath);
+                    } else {
+                        // Final fallback: home directory
+                        initialPath = home;
+                        Log.d(TAG, "Using home path: " + initialPath);
                     }
-                    conn.disconnect();
                 }
-            } catch (Exception e) {
-                Log.e(TAG, "Error fetching session CWD for file browser", e);
+            } else {
+                // No session, use home
+                initialPath = home;
+                Log.d(TAG, "No session, using home: " + initialPath);
             }
 
             final String path = initialPath;
-            final String sessionName = deriveSessionName();
-            runOnUiThread(() -> tabManager.addFileBrowserTab(sessionName, path));
+            final String session = sessionName;
+            Log.d(TAG, "Opening file browser with path: " + path + ", session: " + session);
+            runOnUiThread(() -> tabManager.addFileBrowserTab(session, path));
         });
     }
 
@@ -545,6 +536,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
             String host = AppConfig.getSshHost(this);
             int port = AppConfig.getSshPort(this);
             String initialPath = tab.currentPath != null ? tab.currentPath : "/";
+            Log.d(TAG, "showFileBrowserForTab: host=" + host + ", port=" + port + ", tab.currentPath=" + tab.currentPath + ", initialPath=" + initialPath);
             browserView.setup(sftpManager, host, port, initialPath);
             fileBrowserViews.put(tab.id, browserView);
         } else {
