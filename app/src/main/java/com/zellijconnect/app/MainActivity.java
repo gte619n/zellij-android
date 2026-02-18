@@ -1,6 +1,8 @@
 package com.zellijconnect.app;
 
 import android.annotation.SuppressLint;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -699,41 +701,47 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         WebView webView = webViewPool.get(active.id);
         if (webView == null) return;
 
-        // Escape the text for safe injection into JavaScript
-        String escaped = text
-            .replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r");
+        // Also copy to clipboard as fallback
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            ClipData clip = ClipData.newPlainText("TextInput", text);
+            clipboard.setPrimaryClip(clip);
+        }
 
-        // Type text into the terminal by dispatching input events character by character
-        // This works with xterm.js by writing directly to the terminal
+        // Focus the WebView and textarea first
+        webView.requestFocus();
         webView.evaluateJavascript(
             "(function() {" +
-            "  var text = '" + escaped + "';" +
-            "  var term = document.querySelector('.xterm-helper-textarea');" +
-            "  if (term) {" +
-            "    term.focus();" +
-            "    for (var i = 0; i < text.length; i++) {" +
-            "      var ch = text[i];" +
-            "      var ev = new KeyboardEvent('keypress', {" +
-            "        key: ch, charCode: ch.charCodeAt(0), keyCode: ch.charCodeAt(0)," +
-            "        which: ch.charCodeAt(0), bubbles: true" +
-            "      });" +
-            "      term.dispatchEvent(ev);" +
-            "    }" +
-            "  }" +
-            "  // Fallback: use xterm's paste bracket mode via input event" +
-            "  if (term) {" +
-            "    var inputEvent = new InputEvent('input', {" +
-            "      data: text, inputType: 'insertText', bubbles: true" +
-            "    });" +
-            "    term.value = text;" +
-            "    term.dispatchEvent(inputEvent);" +
-            "  }" +
+            "  var textarea = document.querySelector('.xterm-helper-textarea');" +
+            "  if (textarea) textarea.focus();" +
+            "  return !!textarea;" +
             "})();",
-            null
+            result -> {
+                Log.d("ZellijConnect", "Textarea focused, sending " + text.length() + " chars one at a time via InputConnection");
+                // Small delay to ensure focus, then send characters
+                webView.postDelayed(() -> sendCharacterByCharacter(webView, text, 0), 100);
+            }
         );
+    }
+
+    private void sendCharacterByCharacter(WebView webView, String text, int index) {
+        if (index >= text.length()) {
+            Log.d("ZellijConnect", "Finished sending all " + text.length() + " characters");
+            return;
+        }
+
+        String character = String.valueOf(text.charAt(index));
+
+        // Get InputConnection and commit single character
+        android.view.inputmethod.InputConnection ic = webView.onCreateInputConnection(
+            new android.view.inputmethod.EditorInfo());
+        if (ic != null) {
+            ic.commitText(character, 1);
+            Log.d("ZellijConnect", "Sent char " + index + ": " + character);
+        }
+
+        // Schedule next character with a small delay
+        webView.postDelayed(() -> sendCharacterByCharacter(webView, text, index + 1), 20);
     }
 
     // --- Lifecycle ---
