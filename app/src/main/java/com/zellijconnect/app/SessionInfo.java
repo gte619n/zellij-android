@@ -18,10 +18,13 @@ public class SessionInfo {
     public final String gitBranch;
     public final boolean mergedToDev;
     public final boolean remoteBranchExists;
+    public final boolean hasUncommittedChanges;
+    public final int unpushedCommitCount;
 
     public SessionInfo(String name, String workingDirectory,
                       String claudeStatus, String claudeActivity, String claudeDescription,
-                      String gitBranch, boolean mergedToDev, boolean remoteBranchExists) {
+                      String gitBranch, boolean mergedToDev, boolean remoteBranchExists,
+                      boolean hasUncommittedChanges, int unpushedCommitCount) {
         this.name = name;
         this.workingDirectory = workingDirectory;
         this.claudeStatus = claudeStatus;
@@ -30,6 +33,8 @@ public class SessionInfo {
         this.gitBranch = gitBranch;
         this.mergedToDev = mergedToDev;
         this.remoteBranchExists = remoteBranchExists;
+        this.hasUncommittedChanges = hasUncommittedChanges;
+        this.unpushedCommitCount = unpushedCommitCount;
     }
 
     public static SessionInfo fromJson(JSONObject json) {
@@ -56,17 +61,22 @@ public class SessionInfo {
             String gitBranch = null;
             boolean mergedToDev = false;
             boolean remoteBranchExists = true;
+            boolean hasUncommittedChanges = false;
+            int unpushedCommitCount = 0;
             if (git != null) {
                 gitBranch = git.optString("branch", null);
                 mergedToDev = git.optBoolean("mergedToDev", false);
                 remoteBranchExists = git.optBoolean("remoteBranchExists", true);
+                hasUncommittedChanges = git.optBoolean("hasUncommittedChanges", false);
+                unpushedCommitCount = git.optInt("unpushedCommitCount", 0);
             }
 
             return new SessionInfo(name, workingDirectory,
                                   claudeStatus, claudeActivity, claudeDescription,
-                                  gitBranch, mergedToDev, remoteBranchExists);
+                                  gitBranch, mergedToDev, remoteBranchExists,
+                                  hasUncommittedChanges, unpushedCommitCount);
         } catch (Exception e) {
-            return new SessionInfo("error", null, "unknown", null, null, null, false, false);
+            return new SessionInfo("error", null, "unknown", null, null, null, false, false, false, 0);
         }
     }
 }

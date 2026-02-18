@@ -14,12 +14,14 @@ Binds to port 7601 by default.
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import http.server
 import socketserver
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 import threading
 import time
 
@@ -140,11 +142,28 @@ def get_git_status(cwd):
     # Get last commit info
     last_commit = run_command('git log -1 --format="%s" 2>/dev/null', cwd=cwd)
 
+    # Check for uncommitted changes
+    porcelain = run_command('git status --porcelain', cwd=cwd)
+    has_uncommitted_changes = bool(porcelain)
+
+    # Count unpushed commits
+    unpushed_str = run_command('git rev-list @{u}..HEAD --count 2>/dev/null', cwd=cwd)
+    try:
+        unpushed_commit_count = int(unpushed_str) if unpushed_str is not None else 0
+    except (ValueError, TypeError):
+        unpushed_commit_count = 0
+
+    # Check if this is a worktree
+    has_worktree = '/.worktrees/' in cwd
+
     return {
         'branch': branch,
         'mergedToDev': merged_to_dev,
         'remoteBranchExists': remote_exists,
-        'lastCommit': last_commit
+        'lastCommit': last_commit,
+        'hasUncommittedChanges': has_uncommitted_changes,
+        'unpushedCommitCount': unpushed_commit_count,
+        'hasWorktree': has_worktree
     }
 
 
@@ -188,7 +207,7 @@ class SessionStatusHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
@@ -226,6 +245,84 @@ class SessionStatusHandler(http.server.BaseHTTPRequestHandler):
         else:
             self._set_headers(404)
             self.wfile.write(json.dumps({'error': 'Not found'}).encode())
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        params = parse_qs(parsed.query)
+
+        # Match /api/sessions/{name}
+        match = re.match(r'^/api/sessions/(.+)$', path)
+        if not match:
+            self._set_headers(404)
+            self.wfile.write(json.dumps({'error': 'Not found'}).encode())
+            return
+
+        session_name = match.group(1)
+        delete_worktree = params.get('deleteWorktree', ['false'])[0].lower() == 'true'
+        delete_branch = params.get('deleteBranch', ['false'])[0].lower() == 'true'
+
+        # Look up session CWD and branch BEFORE killing
+        cwd_map = get_session_cwd_map()
+        session_cwd = cwd_map.get(session_name)
+        session_branch = None
+        if session_cwd and os.path.isdir(session_cwd):
+            session_branch = run_command('git branch --show-current', cwd=session_cwd)
+
+        # Kill the zellij session
+        kill_result = run_command(f'zellij kill-session {session_name}', timeout=10)
+
+        # Clean up status files
+        status_json = STATUS_DIR / f'{session_name}.json'
+        status_desc = STATUS_DIR / f'{session_name}.desc'
+        if status_json.exists():
+            status_json.unlink()
+        if status_desc.exists():
+            status_desc.unlink()
+
+        # Remove from CWD map
+        if session_name in cwd_map:
+            del cwd_map[session_name]
+            save_session_cwd_map(cwd_map)
+
+        worktree_removed = False
+        branch_deleted = False
+
+        # Handle worktree cleanup
+        if delete_worktree and session_cwd and '/.worktrees/' in session_cwd:
+            # Find main repo by looking for the parent of .worktrees
+            worktree_parent = session_cwd.split('/.worktrees/')[0]
+
+            # Try git worktree remove first
+            result = run_command(f'git worktree remove --force "{session_cwd}"', cwd=worktree_parent, timeout=15)
+            if result is not None:
+                worktree_removed = True
+            else:
+                # Fallback: rm -rf + prune
+                try:
+                    shutil.rmtree(session_cwd, ignore_errors=True)
+                    run_command('git worktree prune', cwd=worktree_parent)
+                    worktree_removed = True
+                except Exception:
+                    pass
+
+            # Delete branch if requested
+            if delete_branch and session_branch:
+                result = run_command(f'git branch -D {session_branch}', cwd=worktree_parent, timeout=10)
+                if result is not None:
+                    branch_deleted = True
+
+        # Invalidate cache
+        _cache['data'] = None
+        _cache['timestamp'] = 0
+
+        self._set_headers(200)
+        self.wfile.write(json.dumps({
+            'success': True,
+            'killed': session_name,
+            'worktreeRemoved': worktree_removed,
+            'branchDeleted': branch_deleted
+        }).encode())
 
     def log_message(self, format, *args):
         # Suppress default logging, or customize as needed

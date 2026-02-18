@@ -329,6 +329,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     }
 
     private void showSessionPicker() {
+        final SessionPickerDialog[] dialogHolder = new SessionPickerDialog[1];
         SessionPickerDialog dialog = new SessionPickerDialog(this, new SessionPickerDialog.SessionPickerListener() {
             @Override
             public void onGateway() {
@@ -348,11 +349,60 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                 String sessionUrl = AppConfig.getBaseUrl(MainActivity.this) + "/" + sessionName;
                 tabManager.addTab(sessionUrl);
             }
+
+            @Override
+            public void onDeleteSession(String sessionName, boolean deleteWorktree, boolean deleteBranch) {
+                deleteSession(sessionName, deleteWorktree, deleteBranch, dialogHolder[0]);
+            }
         });
+        dialogHolder[0] = dialog;
         dialog.show();
 
         // Fetch sessions from the status API
         fetchSessions(dialog);
+    }
+
+    private void deleteSession(String sessionName, boolean deleteWorktree, boolean deleteBranch,
+                               SessionPickerDialog dialog) {
+        executor.execute(() -> {
+            try {
+                Uri baseUri = Uri.parse(AppConfig.getBaseUrl(MainActivity.this));
+                int metadataPort = AppConfig.getMetadataPort(MainActivity.this);
+                String apiUrl = "https://" + baseUri.getHost() + ":" + metadataPort
+                    + "/api/sessions/" + sessionName
+                    + "?deleteWorktree=" + deleteWorktree
+                    + "&deleteBranch=" + deleteBranch;
+
+                URL url = new URL(apiUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("DELETE");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(15000);
+
+                int responseCode = conn.getResponseCode();
+                conn.disconnect();
+
+                if (responseCode == 200) {
+                    // Refresh the session list
+                    runOnUiThread(() -> fetchSessions(dialog));
+                } else {
+                    runOnUiThread(() -> {
+                        android.widget.Toast.makeText(MainActivity.this,
+                            getString(R.string.session_delete_failed) + " (" + responseCode + ")",
+                            android.widget.Toast.LENGTH_SHORT).show();
+                        fetchSessions(dialog);
+                    });
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error deleting session", e);
+                runOnUiThread(() -> {
+                    android.widget.Toast.makeText(MainActivity.this,
+                        getString(R.string.session_delete_failed),
+                        android.widget.Toast.LENGTH_SHORT).show();
+                    fetchSessions(dialog);
+                });
+            }
+        });
     }
 
     private void fetchSessions(SessionPickerDialog dialog) {

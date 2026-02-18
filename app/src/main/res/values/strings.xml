@@ -92,4 +92,17 @@
     <string name="text_input_title">Enter Text</string>
     <string name="text_input_hint">Type or dictate your text here\u2026</string>
     <string name="text_input_send">Send</string>
+
+    <!-- Session Delete -->
+    <string name="kill_session_title">Kill Session?</string>
+    <string name="kill_session_confirm">Kill Session</string>
+    <string name="cleanup_worktree_title">Clean Up Worktree?</string>
+    <string name="cleanup_worktree_message">Session killed. Would you also like to remove the worktree and branch?</string>
+    <string name="delete_worktree_branch">Delete Worktree &amp; Branch</string>
+    <string name="keep">Keep</string>
+    <string name="warning_uncommitted">⚠ Uncommitted changes in worktree</string>
+    <string name="warning_unpushed">⚠ %d unpushed commit(s)</string>
+    <string name="warning_not_merged">⚠ Branch not merged to dev</string>
+    <string name="info_merged">✓ Branch merged to dev</string>
+    <string name="session_delete_failed">Failed to delete session</string>
 </resources>

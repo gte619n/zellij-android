@@ -2,6 +2,11 @@ package com.zellijconnect.app;
 
 import android.app.Dialog;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,8 +21,12 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +37,7 @@ public class SessionPickerDialog extends Dialog {
         void onGateway();
         void onCreateSession(String sessionName);
         void onAttachSession(String sessionName);
+        void onDeleteSession(String sessionName, boolean deleteWorktree, boolean deleteBranch);
     }
 
     private final SessionPickerListener listener;
@@ -64,6 +74,62 @@ public class SessionPickerDialog extends Dialog {
         adapter = new SessionAdapter();
         sessionList.setLayoutManager(new LinearLayoutManager(getContext()));
         sessionList.setAdapter(adapter);
+
+        // Swipe-to-delete on session rows
+        ItemTouchHelper swipeTouchHelper = new ItemTouchHelper(
+            new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+                private final ColorDrawable background = new ColorDrawable(Color.parseColor("#D32F2F"));
+                private final Drawable deleteIcon = ContextCompat.getDrawable(getContext(), R.drawable.ic_delete);
+
+                @Override
+                public boolean onMove(@NonNull RecyclerView rv,
+                                      @NonNull RecyclerView.ViewHolder vh,
+                                      @NonNull RecyclerView.ViewHolder target) {
+                    return false;
+                }
+
+                @Override
+                public void onSwiped(@NonNull RecyclerView.ViewHolder vh, int direction) {
+                    int position = vh.getBindingAdapterPosition();
+                    if (position != RecyclerView.NO_POSITION && position < sessions.size()) {
+                        SessionInfo session = sessions.get(position);
+                        showKillConfirmation(session, position);
+                    }
+                }
+
+                @Override
+                public void onChildDraw(@NonNull Canvas c, @NonNull RecyclerView rv,
+                                        @NonNull RecyclerView.ViewHolder vh, float dX, float dY,
+                                        int actionState, boolean isCurrentlyActive) {
+                    View itemView = vh.itemView;
+
+                    if (dX < 0) {
+                        // Draw red background
+                        background.setBounds(
+                            itemView.getRight() + (int) dX,
+                            itemView.getTop(),
+                            itemView.getRight(),
+                            itemView.getBottom()
+                        );
+                        background.draw(c);
+
+                        // Draw trash icon centered vertically on right side
+                        if (deleteIcon != null) {
+                            int iconMargin = (itemView.getHeight() - deleteIcon.getIntrinsicHeight()) / 2;
+                            int iconTop = itemView.getTop() + iconMargin;
+                            int iconBottom = iconTop + deleteIcon.getIntrinsicHeight();
+                            int iconLeft = itemView.getRight() - iconMargin - deleteIcon.getIntrinsicWidth();
+                            int iconRight = itemView.getRight() - iconMargin;
+                            deleteIcon.setBounds(iconLeft, iconTop, iconRight, iconBottom);
+                            deleteIcon.draw(c);
+                        }
+                    }
+
+                    super.onChildDraw(c, rv, vh, dX, dY, actionState, isCurrentlyActive);
+                }
+            }
+        );
+        swipeTouchHelper.attachToRecyclerView(sessionList);
 
         btnGateway.setOnClickListener(v -> {
             dismiss();
@@ -126,6 +192,86 @@ public class SessionPickerDialog extends Dialog {
             sessionList.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
         }
+    }
+
+    private void showKillConfirmation(SessionInfo session, int position) {
+        Context ctx = getContext();
+        StringBuilder message = new StringBuilder();
+        message.append("Session: ").append(session.name).append("\n");
+
+        if (session.gitBranch != null && !session.gitBranch.isEmpty()) {
+            message.append("Branch: ").append(session.gitBranch).append("\n");
+        }
+
+        message.append("\n");
+
+        // Git warnings
+        boolean hasWarnings = false;
+        if (session.hasUncommittedChanges) {
+            message.append(ctx.getString(R.string.warning_uncommitted)).append("\n");
+            hasWarnings = true;
+        }
+        if (session.unpushedCommitCount > 0) {
+            message.append(String.format(ctx.getString(R.string.warning_unpushed), session.unpushedCommitCount)).append("\n");
+            hasWarnings = true;
+        }
+        if (session.gitBranch != null && !session.mergedToDev) {
+            message.append(ctx.getString(R.string.warning_not_merged)).append("\n");
+            hasWarnings = true;
+        }
+        if (session.mergedToDev) {
+            message.append(ctx.getString(R.string.info_merged)).append("\n");
+        }
+
+        if (!hasWarnings && session.gitBranch == null) {
+            message.append("No git information available.\n");
+        }
+
+        new MaterialAlertDialogBuilder(ctx)
+            .setTitle(R.string.kill_session_title)
+            .setMessage(message.toString().trim())
+            .setNegativeButton(R.string.cancel, (d, w) -> {
+                // Reset the swipe — restore the row
+                adapter.notifyItemChanged(position);
+            })
+            .setPositiveButton(R.string.kill_session_confirm, (d, w) -> {
+                // Kill without worktree cleanup first
+                listener.onDeleteSession(session.name, false, false);
+
+                // If this session has a worktree, offer cleanup after kill
+                boolean hasWorktree = session.workingDirectory != null
+                    && session.workingDirectory.contains("/.worktrees/");
+                if (hasWorktree) {
+                    showWorktreeCleanup(session);
+                }
+            })
+            .setOnCancelListener(d -> {
+                // Reset the swipe if dialog is cancelled (back button)
+                adapter.notifyItemChanged(position);
+            })
+            .show();
+    }
+
+    private void showWorktreeCleanup(SessionInfo session) {
+        Context ctx = getContext();
+        StringBuilder message = new StringBuilder();
+        message.append(ctx.getString(R.string.cleanup_worktree_message)).append("\n\n");
+
+        if (session.workingDirectory != null) {
+            message.append("Path: ").append(session.workingDirectory).append("\n");
+        }
+        if (session.gitBranch != null) {
+            message.append("Branch: ").append(session.gitBranch);
+        }
+
+        new MaterialAlertDialogBuilder(ctx)
+            .setTitle(R.string.cleanup_worktree_title)
+            .setMessage(message.toString().trim())
+            .setNegativeButton(R.string.keep, null)
+            .setPositiveButton(R.string.delete_worktree_branch, (d, w) -> {
+                listener.onDeleteSession(session.name, true, true);
+            })
+            .show();
     }
 
     private class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.ViewHolder> {

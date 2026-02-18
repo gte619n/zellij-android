@@ -99,7 +99,7 @@ public class KeepAliveService extends Service {
         String contentText = tabCount + " active tab" + (tabCount != 1 ? "s" : "") + " - Connected";
 
         return new Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("ZellijConnect")
+            .setContentTitle("Anvil")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
