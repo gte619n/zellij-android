@@ -34,7 +34,6 @@ import java.util.List;
 public class SessionPickerDialog extends Dialog {
 
     public interface SessionPickerListener {
-        void onGateway();
         void onCreateSession(String sessionName);
         void onAttachSession(String sessionName);
         void onDeleteSession(String sessionName, boolean deleteWorktree, boolean deleteBranch);
@@ -67,7 +66,6 @@ public class SessionPickerDialog extends Dialog {
         sessionNameInput = findViewById(R.id.sessionNameInput);
         tableHeader = findViewById(R.id.tableHeader);
         headerDivider = findViewById(R.id.headerDivider);
-        Button btnGateway = findViewById(R.id.btnGateway);
         Button btnCreate = findViewById(R.id.btnCreate);
         Button btnCancel = findViewById(R.id.btnCancel);
 
@@ -130,11 +128,6 @@ public class SessionPickerDialog extends Dialog {
             }
         );
         swipeTouchHelper.attachToRecyclerView(sessionList);
-
-        btnGateway.setOnClickListener(v -> {
-            dismiss();
-            listener.onGateway();
-        });
 
         btnCreate.setOnClickListener(v -> createSession());
 

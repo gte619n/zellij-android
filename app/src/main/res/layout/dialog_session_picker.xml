@@ -7,32 +7,15 @@
     android:minWidth="520dp"
     android:background="?attr/colorSurface">
 
-    <!-- Title bar with Gateway button -->
-    <LinearLayout
+    <!-- Title -->
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/session_picker_title"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="?attr/colorOnSurface" />
-
-        <Button
-            android:id="@+id/btnGateway"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:text="@string/open_gateway"
-            android:textSize="12sp"
-            android:backgroundTint="?attr/colorPrimary" />
-    </LinearLayout>
+        android:layout_marginBottom="16dp"
+        android:text="@string/session_picker_title"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface" />
 
     <!-- Active Sessions Section -->
     <TextView

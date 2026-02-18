@@ -332,11 +332,6 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         final SessionPickerDialog[] dialogHolder = new SessionPickerDialog[1];
         SessionPickerDialog dialog = new SessionPickerDialog(this, new SessionPickerDialog.SessionPickerListener() {
             @Override
-            public void onGateway() {
-                tabManager.addTab(AppConfig.getGatewayUrl(MainActivity.this));
-            }
-
-            @Override
             public void onCreateSession(String sessionName) {
                 // Create a new named session
                 String sessionUrl = AppConfig.getBaseUrl(MainActivity.this) + "/" + sessionName + "?action=create";
