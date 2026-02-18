@@ -86,4 +86,10 @@
     <string name="sftp_test_success">Connected successfully to %1$s (%2$d items in home directory)</string>
     <string name="sftp_test_failed">Connection failed: %1$s</string>
     <string name="sftp_testing">Testing connection\u2026</string>
+
+    <!-- Text Input Dialog -->
+    <string name="text_input">Text Input</string>
+    <string name="text_input_title">Enter Text</string>
+    <string name="text_input_hint">Type or dictate your text here\u2026</string>
+    <string name="text_input_send">Send</string>
 </resources>

@@ -11,17 +11,20 @@ import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebView;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.net.Uri;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import androidx.appcompat.app.AlertDialog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -50,7 +53,6 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
     private static final String TAG = "ZellijConnect";
     private static final String PREFS_NAME = "zellij_prefs";
-    private static final String KEY_IMMERSIVE = "immersive_mode";
 
     private TabManager tabManager;
     private WebViewPool webViewPool;
@@ -63,7 +65,6 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     private LinearLayout errorBanner;
     private LinearLayout connectingIndicator;
     private RecyclerView tabStrip;
-    private boolean isImmersive;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Runnable connectingTimeout = () -> connectingIndicator.setVisibility(View.GONE);
 
@@ -124,7 +125,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         ImageButton btnFileBrowser = findViewById(R.id.btnFileBrowser);
         ImageButton btnOpenBrowser = findViewById(R.id.btnOpenBrowser);
         ImageButton btnSettings = findViewById(R.id.btnSettings);
-        ImageButton btnToggleImmersive = findViewById(R.id.btnToggleImmersive);
+        ImageButton btnTextInput = findViewById(R.id.btnTextInput);
 
         // Init managers
         imeSwitchManager = new IMESwitchManager(this);
@@ -191,14 +192,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         btnFileBrowser.setOnClickListener(v -> openFileBrowser());
         btnOpenBrowser.setOnClickListener(v -> openBrowser());
         btnSettings.setOnClickListener(v -> showSettings());
-        btnToggleImmersive.setOnClickListener(v -> toggleImmersiveMode());
-
-        // Restore immersive mode preference
-        isImmersive = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(KEY_IMMERSIVE, false);
-        if (isImmersive) {
-            applyImmersiveMode(true);
-        }
+        btnTextInput.setOnClickListener(v -> showTextInputDialog());
 
         // Back button: navigate up in file browser, go back in WebView, or minimize app
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -588,9 +582,6 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                     imeSwitchManager.showKeyboard(wv);
                 }
             }
-            if (isImmersive) {
-                applyImmersiveMode(true);
-            }
         } else {
             imeSwitchManager.switchToDefaultKeyboard();
         }
@@ -650,29 +641,99 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         return super.dispatchKeyEvent(event);
     }
 
-    // --- Immersive Mode ---
+    // --- Text Input Dialog ---
 
-    private void toggleImmersiveMode() {
-        isImmersive = !isImmersive;
-        applyImmersiveMode(isImmersive);
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_IMMERSIVE, isImmersive)
-            .apply();
+    private void showTextInputDialog() {
+        // Switch to default keyboard so user gets autocomplete/voice typing
+        imeSwitchManager.switchToDefaultKeyboard();
+
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_text_input, null);
+        EditText editText = dialogView.findViewById(R.id.editTextInput);
+        Button btnCancel = dialogView.findViewById(R.id.btnTextInputCancel);
+        Button btnOk = dialogView.findViewById(R.id.btnTextInputOk);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create();
+
+        // When dialog is dismissed (by any means), switch back to terminal keyboard
+        dialog.setOnDismissListener(d -> {
+            TabManager.Tab active = tabManager.getActiveTab();
+            if (active != null && active.type == TabManager.TabType.TERMINAL) {
+                imeSwitchManager.switchToTerminalKeyboard();
+                WebView wv = webViewPool.get(active.id);
+                if (wv != null) {
+                    wv.requestFocus();
+                    imeSwitchManager.showKeyboard(wv);
+                }
+            }
+        });
+
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+        btnOk.setOnClickListener(v -> {
+            String text = editText.getText().toString();
+            if (!text.isEmpty()) {
+                typeTextIntoTerminal(text);
+            }
+            dialog.dismiss();
+        });
+
+        dialog.show();
+
+        // Auto-focus the EditText and show keyboard
+        editText.requestFocus();
+        editText.postDelayed(() -> {
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT);
+            }
+        }, 200);
     }
 
-    private void applyImmersiveMode(boolean immersive) {
-        WindowInsetsController controller = getWindow().getInsetsController();
-        if (controller == null) return;
+    private void typeTextIntoTerminal(String text) {
+        TabManager.Tab active = tabManager.getActiveTab();
+        if (active == null || active.type != TabManager.TabType.TERMINAL) return;
 
-        if (immersive) {
-            controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-            controller.setSystemBarsBehavior(
-                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            );
-        } else {
-            controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-        }
+        WebView webView = webViewPool.get(active.id);
+        if (webView == null) return;
+
+        // Escape the text for safe injection into JavaScript
+        String escaped = text
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r");
+
+        // Type text into the terminal by dispatching input events character by character
+        // This works with xterm.js by writing directly to the terminal
+        webView.evaluateJavascript(
+            "(function() {" +
+            "  var text = '" + escaped + "';" +
+            "  var term = document.querySelector('.xterm-helper-textarea');" +
+            "  if (term) {" +
+            "    term.focus();" +
+            "    for (var i = 0; i < text.length; i++) {" +
+            "      var ch = text[i];" +
+            "      var ev = new KeyboardEvent('keypress', {" +
+            "        key: ch, charCode: ch.charCodeAt(0), keyCode: ch.charCodeAt(0)," +
+            "        which: ch.charCodeAt(0), bubbles: true" +
+            "      });" +
+            "      term.dispatchEvent(ev);" +
+            "    }" +
+            "  }" +
+            "  // Fallback: use xterm's paste bracket mode via input event" +
+            "  if (term) {" +
+            "    var inputEvent = new InputEvent('input', {" +
+            "      data: text, inputType: 'insertText', bubbles: true" +
+            "    });" +
+            "    term.value = text;" +
+            "    term.dispatchEvent(inputEvent);" +
+            "  }" +
+            "})();",
+            null
+        );
     }
 
     // --- Lifecycle ---

@@ -76,13 +76,13 @@
             android:padding="6dp" />
 
         <ImageButton
-            android:id="@+id/btnToggleImmersive"
+            android:id="@+id/btnTextInput"
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_marginEnd="4dp"
-            android:src="@drawable/ic_fullscreen"
+            android:src="@drawable/ic_chat_bubble"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/toggle_immersive"
+            android:contentDescription="@string/text_input"
             android:scaleType="centerInside"
             android:padding="6dp" />
     </LinearLayout>
