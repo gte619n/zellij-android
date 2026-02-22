@@ -29,6 +29,8 @@ import io.noties.markwon.Markwon;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.ext.tables.TablePlugin;
 import io.noties.markwon.ext.tasklist.TaskListPlugin;
+import io.noties.markwon.image.ImagesPlugin;
+import io.noties.markwon.linkify.LinkifyPlugin;
 import io.noties.markwon.syntax.Prism4jThemeDarkula;
 import io.noties.markwon.syntax.SyntaxHighlightPlugin;
 import io.noties.prism4j.Prism4j;
@@ -77,6 +79,7 @@ public class FileViewerView extends LinearLayout {
     // Rendering
     private Markwon markwon;
     private Prism4j prism4j;
+    private MermaidPlugin mermaidPlugin;
 
     // Data
     private SftpManager sftpManager;
@@ -136,11 +139,15 @@ public class FileViewerView extends LinearLayout {
         // Init Markwon with plugins
         try {
             prism4j = new Prism4j(new PrismGrammarLocator());
+            mermaidPlugin = MermaidPlugin.create(context);
             markwon = Markwon.builder(context)
                 .usePlugin(StrikethroughPlugin.create())
                 .usePlugin(TablePlugin.create(context))
                 .usePlugin(TaskListPlugin.create(context))
+                .usePlugin(LinkifyPlugin.create())
+                .usePlugin(ImagesPlugin.create())
                 .usePlugin(SyntaxHighlightPlugin.create(prism4j, Prism4jThemeDarkula.create()))
+                .usePlugin(mermaidPlugin)
                 .build();
         } catch (Exception e) {
             Log.e(TAG, "Failed to init Markwon with syntax highlighting, using basic", e);
@@ -378,7 +385,9 @@ public class FileViewerView extends LinearLayout {
     private void renderMarkdown(String text) {
         String displayText = truncateIfNeeded(text);
         showContent();
+        if (mermaidPlugin != null) mermaidPlugin.clearPending();
         markwon.setMarkdown(txtContent, displayText);
+        if (mermaidPlugin != null) mermaidPlugin.renderPendingDiagrams(txtContent);
         restoreScroll();
     }
 
@@ -441,7 +450,9 @@ public class FileViewerView extends LinearLayout {
         FileTypeDetector.FileType fileType = FileTypeDetector.detect(currentFileName);
 
         if (fileType == FileTypeDetector.FileType.MARKDOWN) {
+            if (mermaidPlugin != null) mermaidPlugin.clearPending();
             markwon.setMarkdown(txtContent, displayText);
+            if (mermaidPlugin != null) mermaidPlugin.renderPendingDiagrams(txtContent);
         } else if (fileType == FileTypeDetector.FileType.SOURCE_CODE) {
             String language = FileTypeDetector.getLanguage(currentFileName);
             String fenced = language != null ?

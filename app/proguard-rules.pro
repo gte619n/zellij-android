@@ -3,5 +3,9 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
+-keepclassmembers class com.zellijconnect.app.MermaidRenderer$MermaidBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
 # Keep BuildConfig
 -keep class com.zellijconnect.app.BuildConfig { *; }
