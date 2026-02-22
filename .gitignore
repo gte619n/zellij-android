@@ -18,3 +18,14 @@ gen/
 out/
 .navigation/
 *.log
+
+# IDE - Eclipse
+.project
+.settings/
+.classpath
+
+# Python
+__pycache__/
+
+# OMC
+.omc/

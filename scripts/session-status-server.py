@@ -333,7 +333,8 @@ def main():
     # Ensure status directory exists
     STATUS_DIR.mkdir(exist_ok=True)
 
-    with socketserver.TCPServer(('', PORT), SessionStatusHandler) as httpd:
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(('127.0.0.1', PORT), SessionStatusHandler) as httpd:
         print(f'Session Status Server running on port {PORT}')
         print(f'Status directory: {STATUS_DIR}')
         print(f'Session CWD map: {SESSION_CWD_MAP_FILE}')
