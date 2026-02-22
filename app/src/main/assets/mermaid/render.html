@@ -26,7 +26,7 @@
         secondaryColor: '#2d2d2d',
         tertiaryColor: '#3d3d3d'
       },
-      securityLevel: 'strict',
+      securityLevel: 'loose',
       fontFamily: 'monospace'
     });
 
@@ -54,37 +54,41 @@
         }
 
         var bbox = svgEl.getBoundingClientRect();
-        var width = Math.ceil(bbox.width);
-        var height = Math.ceil(bbox.height);
+        var width = Math.ceil(bbox.width) || 800;
+        var height = Math.ceil(bbox.height) || 600;
 
-        // Serialize SVG to data URL for canvas rendering
+        // Ensure SVG has explicit dimensions for canvas rendering
+        svgEl.setAttribute('width', width);
+        svgEl.setAttribute('height', height);
+
+        // Serialize SVG and use data URL (more reliable than Blob URL on Android)
         var svgData = new XMLSerializer().serializeToString(svgEl);
-        var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        var url = URL.createObjectURL(svgBlob);
+        var encodedSvg = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
 
         var img = new Image();
         img.onload = function() {
-          var scale = 2; // 2x for crisp rendering on high-DPI
-          var canvas = document.getElementById('canvas');
-          canvas.width = width * scale;
-          canvas.height = height * scale;
+          try {
+            var scale = 2; // 2x for crisp rendering on high-DPI
+            var canvas = document.getElementById('canvas');
+            canvas.width = width * scale;
+            canvas.height = height * scale;
 
-          var ctx = canvas.getContext('2d');
-          ctx.scale(scale, scale);
-          ctx.drawImage(img, 0, 0, width, height);
+            var ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+            ctx.drawImage(img, 0, 0, width, height);
 
-          URL.revokeObjectURL(url);
+            var dataUrl = canvas.toDataURL('image/png');
+            var base64 = dataUrl.split(',')[1];
 
-          var dataUrl = canvas.toDataURL('image/png');
-          var base64 = dataUrl.split(',')[1];
-
-          MermaidBridge.onRendered(base64, width * scale, height * scale);
+            MermaidBridge.onRendered(base64, width * scale, height * scale);
+          } catch (canvasErr) {
+            MermaidBridge.onError('Canvas error: ' + canvasErr.message);
+          }
         };
-        img.onerror = function() {
-          URL.revokeObjectURL(url);
-          MermaidBridge.onError('Failed to render SVG to image');
+        img.onerror = function(e) {
+          MermaidBridge.onError('Failed to load SVG image: ' + (e.message || 'unknown'));
         };
-        img.src = url;
+        img.src = encodedSvg;
 
       } catch (e) {
         MermaidBridge.onError(e.message || 'Unknown mermaid error');

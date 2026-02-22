@@ -187,7 +187,7 @@ public class MermaidRenderer {
         float ratio = (float) maxWidth / source.getWidth();
         int newHeight = Math.round(source.getHeight() * ratio);
         Bitmap scaled = Bitmap.createScaledBitmap(source, maxWidth, newHeight, true);
-        if (scaled != source) source.recycle();
+        // Do NOT recycle source — it may still be referenced by ImageSpans
         return scaled;
     }
 

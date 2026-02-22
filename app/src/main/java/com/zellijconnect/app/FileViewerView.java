@@ -104,6 +104,7 @@ public class FileViewerView extends LinearLayout {
     private float lastTouchY;
     private ScaleGestureDetector scaleDetector;
 
+    private boolean showingDiagramOverlay;
     private OnBackListener backListener;
 
     public interface OnBackListener {
@@ -140,6 +141,7 @@ public class FileViewerView extends LinearLayout {
         try {
             prism4j = new Prism4j(new PrismGrammarLocator());
             mermaidPlugin = MermaidPlugin.create(context);
+            mermaidPlugin.setOnDiagramClickListener(this::showDiagramFullscreen);
             markwon = Markwon.builder(context)
                 .usePlugin(StrikethroughPlugin.create())
                 .usePlugin(TablePlugin.create(context))
@@ -156,7 +158,11 @@ public class FileViewerView extends LinearLayout {
 
         // Button listeners
         btnBack.setOnClickListener(v -> {
-            if (backListener != null) backListener.onBack();
+            if (showingDiagramOverlay) {
+                dismissDiagramOverlay();
+            } else if (backListener != null) {
+                backListener.onBack();
+            }
         });
         btnReloadFile.setOnClickListener(v -> reload());
         btnLoadMore.setOnClickListener(v -> loadMoreLines());
@@ -382,13 +388,63 @@ public class FileViewerView extends LinearLayout {
         }
     }
 
+    private boolean hasMermaid(String text) {
+        return text.contains("```mermaid");
+    }
+
     private void renderMarkdown(String text) {
-        String displayText = truncateIfNeeded(text);
+        // Load full text for mermaid files (diagrams need complete code blocks)
+        String displayText;
+        if (hasMermaid(text)) {
+            linesShown = allLines.length;
+            btnLoadMore.setVisibility(View.GONE);
+            displayText = text;
+        } else {
+            displayText = truncateIfNeeded(text);
+        }
+
         showContent();
+
+        // Enable ClickableSpan taps for mermaid diagrams
+        if (hasMermaid(text)) {
+            txtContent.setMovementMethod(SafeClickMovementMethod.getInstance());
+        }
+
         if (mermaidPlugin != null) mermaidPlugin.clearPending();
         markwon.setMarkdown(txtContent, displayText);
         if (mermaidPlugin != null) mermaidPlugin.renderPendingDiagrams(txtContent);
+
         restoreScroll();
+    }
+
+    private void showDiagramFullscreen(Bitmap bitmap) {
+        showingDiagramOverlay = true;
+        currentBitmap = bitmap;
+
+        scaleFactor = 1.0f;
+        translateX = 0f;
+        translateY = 0f;
+
+        contentScroll.setVisibility(View.GONE);
+        imageContainer.setVisibility(View.VISIBLE);
+        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        imageView.setImageBitmap(bitmap);
+
+        btnCopy.setVisibility(View.GONE);
+        btnShare.setVisibility(View.GONE);
+    }
+
+    /** Returns true if a diagram overlay was dismissed. */
+    public boolean dismissDiagramOverlay() {
+        if (!showingDiagramOverlay) return false;
+        showingDiagramOverlay = false;
+        currentBitmap = null; // don't recycle — belongs to mermaid cache
+
+        imageContainer.setVisibility(View.GONE);
+        contentScroll.setVisibility(View.VISIBLE);
+        btnCopy.setVisibility(View.VISIBLE);
+        btnShare.setVisibility(View.VISIBLE);
+        return true;
     }
 
     private void renderSourceCode(String text, String fileName) {

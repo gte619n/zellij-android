@@ -478,15 +478,22 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                     initialPath = worktreePath;
                     Log.d(TAG, "Using worktree path: " + initialPath);
                 } else {
-                    // Fallback: ~/oxos/bots
-                    String botsPath = home + "/oxos/bots";
-                    if (sftpManager.directoryExists(host, port, botsPath)) {
-                        initialPath = botsPath;
-                        Log.d(TAG, "Using bots path: " + initialPath);
+                    // Fallback: ~/oxos/bots/.worktrees/
+                    String worktreesDir = home + "/oxos/bots/.worktrees";
+                    if (sftpManager.directoryExists(host, port, worktreesDir)) {
+                        initialPath = worktreesDir;
+                        Log.d(TAG, "Using worktrees dir: " + initialPath);
                     } else {
-                        // Final fallback: home directory
-                        initialPath = home;
-                        Log.d(TAG, "Using home path: " + initialPath);
+                        // Fallback: ~/oxos/bots
+                        String botsPath = home + "/oxos/bots";
+                        if (sftpManager.directoryExists(host, port, botsPath)) {
+                            initialPath = botsPath;
+                            Log.d(TAG, "Using bots path: " + initialPath);
+                        } else {
+                            // Final fallback: home directory
+                            initialPath = home;
+                            Log.d(TAG, "Using home path: " + initialPath);
+                        }
                     }
                 }
             } else {
