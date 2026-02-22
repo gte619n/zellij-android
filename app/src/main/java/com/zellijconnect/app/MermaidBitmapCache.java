@@ -19,13 +19,8 @@ public class MermaidBitmapCache {
                 return bitmap.getByteCount();
             }
 
-            @Override
-            protected void entryRemoved(boolean evicted, String key,
-                                        Bitmap oldValue, Bitmap newValue) {
-                if (evicted && oldValue != null && !oldValue.isRecycled()) {
-                    oldValue.recycle();
-                }
-            }
+            // Do NOT recycle evicted bitmaps — they may still be referenced
+            // by ImageSpans in a visible TextView. Let the GC handle cleanup.
         };
     }
 

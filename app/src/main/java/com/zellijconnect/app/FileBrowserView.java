@@ -323,8 +323,11 @@ public class FileBrowserView extends FrameLayout {
      * Returns true if handled, false if already at root directory.
      */
     public boolean navigateUp() {
-        // If viewing a file, go back to directory listing
-        if (viewingFile) {
+        // If viewing a file, first check for diagram overlay
+        if (viewingFile && fileViewerView != null) {
+            if (fileViewerView.dismissDiagramOverlay()) {
+                return true;
+            }
             closeFileViewer();
             return true;
         }

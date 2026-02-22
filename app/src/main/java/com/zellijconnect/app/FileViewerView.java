@@ -4,6 +4,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.annotation.SuppressLint;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -21,6 +22,9 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
@@ -105,6 +109,7 @@ public class FileViewerView extends LinearLayout {
     private ScaleGestureDetector scaleDetector;
 
     private boolean showingDiagramOverlay;
+    private WebView diagramWebView;
     private OnBackListener backListener;
 
     public interface OnBackListener {
@@ -417,30 +422,97 @@ public class FileViewerView extends LinearLayout {
         restoreScroll();
     }
 
-    private void showDiagramFullscreen(Bitmap bitmap) {
+    @SuppressLint("SetJavaScriptEnabled")
+    private void showDiagramFullscreen(String mermaidCode) {
         showingDiagramOverlay = true;
-        currentBitmap = bitmap;
-
-        scaleFactor = 1.0f;
-        translateX = 0f;
-        translateY = 0f;
 
         contentScroll.setVisibility(View.GONE);
-        imageContainer.setVisibility(View.VISIBLE);
-        imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        imageView.setImageBitmap(bitmap);
-
         btnCopy.setVisibility(View.GONE);
         btnShare.setVisibility(View.GONE);
+
+        // Reuse imageContainer (match_parent FrameLayout) to host the WebView
+        imageView.setVisibility(View.GONE);
+        imageContainer.setVisibility(View.VISIBLE);
+
+        if (diagramWebView != null) {
+            imageContainer.removeView(diagramWebView);
+            diagramWebView.destroy();
+        }
+        diagramWebView = new WebView(getContext());
+        WebSettings settings = diagramWebView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+
+        diagramWebView.setBackgroundColor(0xFF1E1E1E);
+
+        // Escape mermaid code for embedding in JS template literal
+        String escaped = mermaidCode
+                .replace("\\", "\\\\")
+                .replace("`", "\\`")
+                .replace("$", "\\$")
+                .replace("\r", "");
+
+        // Build self-contained HTML with mermaid code embedded inline
+        // Start at scale=1 so diagram fills width; allow deep zoom to 50x
+        String html = "<!DOCTYPE html><html><head>"
+                + "<meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=50, user-scalable=yes\">"
+                + "<style>"
+                + "* { margin:0; padding:0; box-sizing:border-box; }"
+                + "html,body { width:100%; min-height:100vh; background:#1e1e1e; overflow:auto; }"
+                + "#diagram { padding:8px; }"
+                + "#diagram svg { display:block; width:100%; height:auto; }"
+                + "</style>"
+                + "<script src=\"mermaid.min.js\"></script>"
+                + "</head><body>"
+                + "<div id=\"diagram\">Loading diagram...</div>"
+                + "<script>"
+                + "mermaid.initialize({"
+                + "  startOnLoad:false, theme:'dark',"
+                + "  themeVariables:{ darkMode:true, background:'#1e1e1e',"
+                + "    primaryColor:'#6750A4', primaryTextColor:'#e0e0e0',"
+                + "    lineColor:'#888888', secondaryColor:'#2d2d2d', tertiaryColor:'#3d3d3d' },"
+                + "  securityLevel:'loose', fontFamily:'monospace'"
+                + "});"
+                + "mermaid.render('fs-diagram', `" + escaped + "`).then(function(result){"
+                + "  document.getElementById('diagram').innerHTML = result.svg;"
+                + "}).catch(function(e){"
+                + "  document.getElementById('diagram').innerHTML ="
+                + "    '<p style=\"color:#CF6679;font-family:monospace;padding:24px\">Error: '+e.message+'</p>';"
+                + "});"
+                + "</script></body></html>";
+
+        imageContainer.addView(diagramWebView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
+        // loadDataWithBaseURL so relative script src resolves from assets
+        diagramWebView.loadDataWithBaseURL(
+                "file:///android_asset/mermaid/",
+                html,
+                "text/html",
+                "utf-8",
+                null);
     }
 
     /** Returns true if a diagram overlay was dismissed. */
     public boolean dismissDiagramOverlay() {
         if (!showingDiagramOverlay) return false;
         showingDiagramOverlay = false;
-        currentBitmap = null; // don't recycle — belongs to mermaid cache
 
+        if (diagramWebView != null) {
+            imageContainer.removeView(diagramWebView);
+            diagramWebView.destroy();
+            diagramWebView = null;
+        }
+        imageView.setVisibility(View.VISIBLE);
         imageContainer.setVisibility(View.GONE);
+
         contentScroll.setVisibility(View.VISIBLE);
         btnCopy.setVisibility(View.VISIBLE);
         btnShare.setVisibility(View.VISIBLE);

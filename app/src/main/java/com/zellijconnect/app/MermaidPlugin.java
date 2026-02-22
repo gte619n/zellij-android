@@ -35,7 +35,7 @@ import io.noties.markwon.MarkwonVisitor;
 public class MermaidPlugin extends AbstractMarkwonPlugin {
 
     public interface OnDiagramClickListener {
-        void onDiagramClick(Bitmap bitmap);
+        void onDiagramClick(String mermaidCode);
     }
 
     private final MermaidRenderer renderer;
@@ -111,11 +111,11 @@ public class MermaidPlugin extends AbstractMarkwonPlugin {
                     length + 1,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             );
-            final Bitmap clickBitmap = cached;
+            final String clickCode = mermaidCode;
             visitor.builder().setSpan(new ClickableSpan() {
                 @Override
                 public void onClick(@NonNull View widget) {
-                    if (diagramClickListener != null) diagramClickListener.onDiagramClick(clickBitmap);
+                    if (diagramClickListener != null) diagramClickListener.onDiagramClick(clickCode);
                 }
                 @Override
                 public void updateDrawState(@NonNull android.text.TextPaint ds) {}
@@ -176,7 +176,7 @@ public class MermaidPlugin extends AbstractMarkwonPlugin {
                 renderer.render(pending.mermaidCode, new MermaidRenderer.Callback() {
                     @Override
                     public void onRendered(Bitmap bitmap) {
-                        replacePlaceholder(textView, pending.placeholderSpan, bitmap);
+                        replacePlaceholder(textView, pending.placeholderSpan, bitmap, pending.mermaidCode);
                     }
 
                     @Override
@@ -200,7 +200,8 @@ public class MermaidPlugin extends AbstractMarkwonPlugin {
         pendingDiagrams.clear();
     }
 
-    private void setImageSpanWithClick(Spannable spannable, Bitmap bitmap, int start, int end) {
+    private void setImageSpanWithClick(Spannable spannable, Bitmap bitmap,
+                                       String mermaidCode, int start, int end) {
         // Scale drawable bounds to density-independent size
         float density = context.getResources().getDisplayMetrics().density;
         int drawW = Math.round(bitmap.getWidth() / density);
@@ -220,7 +221,7 @@ public class MermaidPlugin extends AbstractMarkwonPlugin {
             @Override
             public void onClick(@NonNull View widget) {
                 if (diagramClickListener != null) {
-                    diagramClickListener.onDiagramClick(bitmap);
+                    diagramClickListener.onDiagramClick(mermaidCode);
                 }
             }
 
@@ -231,7 +232,8 @@ public class MermaidPlugin extends AbstractMarkwonPlugin {
         }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 
-    private void replacePlaceholder(TextView textView, ImageSpan placeholder, Bitmap bitmap) {
+    private void replacePlaceholder(TextView textView, ImageSpan placeholder,
+                                    Bitmap bitmap, String mermaidCode) {
         try {
             CharSequence text = textView.getText();
             if (!(text instanceof Spannable)) return;
@@ -242,7 +244,7 @@ public class MermaidPlugin extends AbstractMarkwonPlugin {
             if (start < 0 || end < 0) return;
 
             spannable.removeSpan(placeholder);
-            setImageSpanWithClick(spannable, bitmap, start, end);
+            setImageSpanWithClick(spannable, bitmap, mermaidCode, start, end);
 
             // Force re-layout so the line height accommodates the new image size
             textView.post(() -> textView.setText(textView.getText(), TextView.BufferType.SPANNABLE));
