@@ -146,12 +146,15 @@ adb logcat -s ZellijConnect:V
 
 The `scripts/` directory contains a session status server that provides:
 
-- List of active Zellij sessions via REST API
-- Claude Code activity status tracking
-- Git branch status per session
-- **HTTPS support via Tailscale** for secure access
+- List of active Zellij sessions with working directory
+- Claude Code activity status and description per session
+- Git branch status (uncommitted changes, unpushed commits, worktree detection)
+- Session deletion with optional worktree/branch cleanup
+- **HTTPS support via Tailscale** for secure remote access from Android
 
 ### Quick Install (on Zellij server)
+
+Works on **macOS** and **Linux** — no `sudo` required:
 
 ```bash
 cd scripts/
@@ -159,11 +162,26 @@ cd scripts/
 ```
 
 The installer automatically:
-- Installs the Python server and hooks
-- Sets up macOS LaunchAgent for auto-start
+- Installs scripts to `~/.local/bin/`
+- Sets up auto-start: macOS LaunchAgent or Linux systemd user service
 - Configures Tailscale HTTPS proxy on port 7601
+- Adds Claude Code hooks to `~/.claude/settings.json`
 
-See `scripts/README.md` for detailed setup instructions.
+```bash
+# Update scripts only (no reinstall)
+./install.sh --update
+
+# Uninstall
+./install.sh --uninstall
+```
+
+See `scripts/README.md` for full setup instructions including Linux prerequisites and manual steps.
+
+### Prerequisites
+
+**macOS:** `brew install python3 git zellij`
+
+**Linux:** `sudo apt install python3 git` + [install zellij](https://zellij.dev/documentation/installation)
 
 ### API Endpoints
 
@@ -171,6 +189,7 @@ See `scripts/README.md` for detailed setup instructions.
 ```
 GET https://your-tailscale-host:7601/api/sessions
 GET https://your-tailscale-host:7601/api/health
+DELETE https://your-tailscale-host:7601/api/sessions/{name}
 ```
 
 **Local HTTP (testing only):**
@@ -179,7 +198,7 @@ GET http://localhost:7601/api/sessions
 GET http://localhost:7601/api/health
 ```
 
-Returns session info including Claude status and git branch info.
+Session response includes Claude status, description, and full git info (branch, uncommitted changes, unpushed commit count).
 
 ## Architecture
 

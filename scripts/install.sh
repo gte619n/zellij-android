@@ -1,153 +1,448 @@
 #!/bin/bash
 #
-# ZellijConnect Session Status Server Installer
+# ZellijConnect Session Status Server - Cross-Platform Installer
 #
-# Installs the session status server and Claude Code hooks on macOS.
+# Installs the session status server and Claude Code hooks.
+# Supports: macOS (LaunchAgent) and Linux (systemd user service)
+#
+# Usage:
+#   ./install.sh              # Install
+#   ./install.sh --uninstall  # Uninstall
+#   ./install.sh --update     # Update scripts only (no service reconfiguration)
 #
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/usr/local/bin"
-HOOK_DIR="$HOME/.local/bin"
-LAUNCHAGENT_DIR="$HOME/Library/LaunchAgents"
+INSTALL_DIR="$HOME/.local/bin"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+SERVICE_PORT=7601
 
-echo "=== ZellijConnect Session Status Server Installer ==="
-echo ""
+# ── Colors ────────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# Install server script
-echo "[1/4] Installing session-status-server.py..."
-sudo mkdir -p "$INSTALL_DIR"
-sudo cp "$SCRIPT_DIR/session-status-server.py" "$INSTALL_DIR/"
-sudo chmod +x "$INSTALL_DIR/session-status-server.py"
-echo "      Installed to $INSTALL_DIR/session-status-server.py"
+ok()   { echo -e "  ${GREEN}✓${NC} $*"; }
+warn() { echo -e "  ${YELLOW}⚠${NC}  $*"; }
+err()  { echo -e "  ${RED}✗${NC} $*"; }
+step() { echo -e "\n${BLUE}[$1]${NC} $2"; }
 
-# Install hook script
-echo "[2/4] Installing claude-status-hook.sh..."
-mkdir -p "$HOOK_DIR"
-cp "$SCRIPT_DIR/claude-status-hook.sh" "$HOOK_DIR/"
-chmod +x "$HOOK_DIR/claude-status-hook.sh"
-echo "      Installed to $HOOK_DIR/claude-status-hook.sh"
+# ── OS Detection ──────────────────────────────────────────────────────────────
+detect_os() {
+    case "$(uname -s)" in
+        Darwin) echo "macos" ;;
+        Linux)  echo "linux" ;;
+        *)      echo "unknown" ;;
+    esac
+}
 
-# Install LaunchAgent
-echo "[3/4] Installing LaunchAgent..."
-mkdir -p "$LAUNCHAGENT_DIR"
-PLIST_FILE="$LAUNCHAGENT_DIR/com.zellijconnect.session-status-server.plist"
+OS=$(detect_os)
 
-# Unload if already loaded
-launchctl unload "$PLIST_FILE" 2>/dev/null || true
-
-# Create plist with correct path
-sed "s|SESSION_SERVER_SCRIPT_PATH|$INSTALL_DIR/session-status-server.py|g" \
-    "$SCRIPT_DIR/com.zellijconnect.session-status-server.plist" \
-    > "$PLIST_FILE"
-
-launchctl load "$PLIST_FILE"
-echo "      Installed and started LaunchAgent"
-
-# Check if server is running
-sleep 1
-if curl -s http://localhost:7601/api/health > /dev/null 2>&1; then
-    echo "      Server is running on port 7601"
-else
-    echo "      Warning: Server may not be running. Check logs at /tmp/session-status-server.error.log"
+if [ "$OS" = "unknown" ]; then
+    err "Unsupported operating system: $(uname -s)"
+    exit 1
 fi
 
-# Configure Tailscale HTTPS proxy
-echo ""
-echo "Configuring Tailscale HTTPS proxy..."
-if command -v tailscale >/dev/null 2>&1; then
-    tailscale serve --bg --https 7601 http://localhost:7601
-    echo "      Tailscale HTTPS configured on port 7601"
-    HOSTNAME=$(tailscale status --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'])" 2>/dev/null || echo "unknown")
-    if [ "$HOSTNAME" != "unknown" ]; then
-        echo "      Access via: https://${HOSTNAME}7601/api/sessions"
+# ── Python Detection ──────────────────────────────────────────────────────────
+find_python3() {
+    # Prefer Homebrew python on macOS, then check common paths
+    local candidates=(
+        /opt/homebrew/bin/python3   # macOS Apple Silicon Homebrew
+        /usr/local/bin/python3      # macOS Intel Homebrew
+        /usr/bin/python3            # System Python
+        python3                     # PATH
+    )
+    for p in "${candidates[@]}"; do
+        if command -v "$p" >/dev/null 2>&1; then
+            echo "$p"
+            return
+        fi
+    done
+    echo ""
+}
+
+PYTHON3=$(find_python3)
+
+# ── Argument Parsing ──────────────────────────────────────────────────────────
+MODE="install"
+for arg in "$@"; do
+    case "$arg" in
+        --uninstall) MODE="uninstall" ;;
+        --update)    MODE="update" ;;
+        --help|-h)
+            echo "Usage: $0 [--install|--update|--uninstall]"
+            echo "  (default) install   - Full installation"
+            echo "  --update            - Update scripts only"
+            echo "  --uninstall         - Remove all components"
+            exit 0
+            ;;
+    esac
+done
+
+# ── Uninstall ─────────────────────────────────────────────────────────────────
+do_uninstall() {
+    echo "=== ZellijConnect Uninstaller ==="
+
+    step "1/3" "Stopping service..."
+    if [ "$OS" = "macos" ]; then
+        PLIST="$HOME/Library/LaunchAgents/com.zellijconnect.session-status-server.plist"
+        launchctl unload "$PLIST" 2>/dev/null || true
+        rm -f "$PLIST"
+        ok "LaunchAgent removed"
+    elif [ "$OS" = "linux" ]; then
+        SERVICE_FILE="$HOME/.config/systemd/user/session-status-server.service"
+        systemctl --user stop session-status-server 2>/dev/null || true
+        systemctl --user disable session-status-server 2>/dev/null || true
+        rm -f "$SERVICE_FILE"
+        systemctl --user daemon-reload 2>/dev/null || true
+        ok "systemd service removed"
     fi
-else
-    echo "      Warning: Tailscale not found. Install Tailscale and run:"
-    echo "               tailscale serve --bg --https 7601 http://localhost:7601"
-fi
 
-# Configure Claude Code hooks
-echo "[4/4] Configuring Claude Code hooks..."
-mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
+    step "2/3" "Removing scripts..."
+    rm -f "$INSTALL_DIR/session-status-server.py"
+    rm -f "$INSTALL_DIR/claude-status-hook.sh"
+    ok "Scripts removed from $INSTALL_DIR"
 
-if [ -f "$CLAUDE_SETTINGS" ]; then
-    # Backup existing settings
-    cp "$CLAUDE_SETTINGS" "$CLAUDE_SETTINGS.backup.$(date +%Y%m%d%H%M%S)"
-    echo "      Backed up existing settings"
+    step "3/3" "Note on remaining files..."
+    warn "Claude Code hooks in $CLAUDE_SETTINGS were NOT removed. Remove manually if needed."
+    warn "Status files in ~/.claude-status/ were NOT removed. Remove with: rm -rf ~/.claude-status"
 
-    # Check if hooks already configured
-    if grep -q "claude-status-hook" "$CLAUDE_SETTINGS" 2>/dev/null; then
-        echo "      Claude hooks already configured in $CLAUDE_SETTINGS"
+    echo ""
+    echo "=== Uninstall Complete ==="
+}
+
+# ── Install / Update ──────────────────────────────────────────────────────────
+do_install() {
+    local update_only="${1:-false}"
+
+    if [ "$update_only" = "true" ]; then
+        echo "=== ZellijConnect Script Updater ==="
     else
-        echo "      NOTE: Please manually add hooks to $CLAUDE_SETTINGS"
-        echo "      See README.md for the hooks configuration JSON"
+        echo "=== ZellijConnect Session Status Server Installer ==="
+        echo "  OS: $OS | Python: ${PYTHON3:-not found}"
     fi
-else
-    # Create new settings file with hooks
-    cat > "$CLAUDE_SETTINGS" << 'EOF'
+
+    # ── Dependency Checks ────────────────────────────────────────────────────
+    if [ "$update_only" = "false" ]; then
+        step "0/5" "Checking dependencies..."
+
+        if [ -z "$PYTHON3" ]; then
+            err "python3 not found. Install it first:"
+            if [ "$OS" = "macos" ]; then
+                echo "       brew install python3"
+            else
+                echo "       sudo apt install python3   # Debian/Ubuntu"
+                echo "       sudo dnf install python3   # Fedora/RHEL"
+            fi
+            exit 1
+        fi
+        ok "python3: $($PYTHON3 --version)"
+
+        if command -v zellij >/dev/null 2>&1; then
+            ok "zellij: $(zellij --version)"
+        else
+            warn "zellij not found. Install from: https://zellij.dev/documentation/installation"
+        fi
+
+        if command -v git >/dev/null 2>&1; then
+            ok "git: $(git --version | head -1)"
+        else
+            warn "git not found (needed for git status features)"
+        fi
+
+        if command -v tailscale >/dev/null 2>&1; then
+            ok "tailscale: $(tailscale version 2>/dev/null | head -1)"
+        else
+            warn "tailscale not found (optional, needed for HTTPS remote access)"
+        fi
+    fi
+
+    # ── Install Scripts ───────────────────────────────────────────────────────
+    step "1/5" "Installing scripts to $INSTALL_DIR..."
+    mkdir -p "$INSTALL_DIR"
+
+    cp "$SCRIPT_DIR/session-status-server.py" "$INSTALL_DIR/"
+    chmod +x "$INSTALL_DIR/session-status-server.py"
+    ok "session-status-server.py → $INSTALL_DIR/"
+
+    cp "$SCRIPT_DIR/claude-status-hook.sh" "$INSTALL_DIR/"
+    chmod +x "$INSTALL_DIR/claude-status-hook.sh"
+    ok "claude-status-hook.sh → $INSTALL_DIR/"
+
+    # If update-only, restart service and exit
+    if [ "$update_only" = "true" ]; then
+        echo ""
+        step "–" "Restarting service..."
+        restart_service
+        echo ""
+        echo "=== Update Complete ==="
+        echo ""
+        test_server
+        return
+    fi
+
+    # ── Auto-Start Service ────────────────────────────────────────────────────
+    step "2/5" "Configuring auto-start service..."
+
+    if [ "$OS" = "macos" ]; then
+        install_launchagent
+    elif [ "$OS" = "linux" ]; then
+        install_systemd
+    fi
+
+    # ── Tailscale HTTPS ───────────────────────────────────────────────────────
+    step "3/5" "Configuring Tailscale HTTPS..."
+
+    if command -v tailscale >/dev/null 2>&1; then
+        tailscale serve --bg --https "$SERVICE_PORT" "http://localhost:$SERVICE_PORT" 2>/dev/null || true
+        ok "Tailscale HTTPS proxy configured on port $SERVICE_PORT"
+        HOSTNAME=$(tailscale status --json 2>/dev/null | "$PYTHON3" -c \
+            "import sys,json; d=json.load(sys.stdin); print(d['Self']['DNSName'])" 2>/dev/null || echo "")
+        if [ -n "$HOSTNAME" ]; then
+            ok "HTTPS endpoint: https://${HOSTNAME}${SERVICE_PORT}/api/sessions"
+        fi
+    else
+        warn "Tailscale not found. For HTTPS access, install Tailscale then run:"
+        echo "         tailscale serve --bg --https $SERVICE_PORT http://localhost:$SERVICE_PORT"
+    fi
+
+    # ── Claude Code Hooks ─────────────────────────────────────────────────────
+    step "4/5" "Configuring Claude Code hooks..."
+    configure_claude_hooks
+
+    # ── Zellij Config Reminder ────────────────────────────────────────────────
+    step "5/5" "Zellij keybinding reminder..."
+    check_zellij_config
+
+    # ── Final Summary ─────────────────────────────────────────────────────────
+    echo ""
+    echo "=== Installation Complete ==="
+    echo ""
+    test_server
+    echo ""
+    echo "View logs:"
+    if [ "$OS" = "macos" ]; then
+        echo "  tail -f /tmp/session-status-server.log"
+        echo "  tail -f /tmp/session-status-server.error.log"
+    else
+        echo "  journalctl --user -u session-status-server -f"
+    fi
+    echo ""
+    echo "To update scripts later:  ./install.sh --update"
+    echo "To uninstall:             ./install.sh --uninstall"
+}
+
+# ── macOS LaunchAgent ─────────────────────────────────────────────────────────
+install_launchagent() {
+    local LAUNCHAGENT_DIR="$HOME/Library/LaunchAgents"
+    local PLIST_DEST="$LAUNCHAGENT_DIR/com.zellijconnect.session-status-server.plist"
+    local SCRIPT_PATH="$INSTALL_DIR/session-status-server.py"
+
+    mkdir -p "$LAUNCHAGENT_DIR"
+
+    # Unload existing service if running
+    launchctl unload "$PLIST_DEST" 2>/dev/null || true
+
+    # Generate plist with correct paths
+    sed -e "s|PYTHON3_PATH|${PYTHON3}|g" \
+        -e "s|SESSION_SERVER_SCRIPT_PATH|${SCRIPT_PATH}|g" \
+        "$SCRIPT_DIR/com.zellijconnect.session-status-server.plist" \
+        > "$PLIST_DEST"
+
+    launchctl load "$PLIST_DEST"
+    sleep 2
+
+    if curl -s "http://localhost:$SERVICE_PORT/api/health" >/dev/null 2>&1; then
+        ok "LaunchAgent installed and running"
+    else
+        warn "LaunchAgent loaded but server may not be ready yet"
+        warn "Check: tail /tmp/session-status-server.error.log"
+    fi
+}
+
+# ── Linux systemd User Service ────────────────────────────────────────────────
+install_systemd() {
+    local SYSTEMD_DIR="$HOME/.config/systemd/user"
+    local SERVICE_FILE="$SYSTEMD_DIR/session-status-server.service"
+    local SCRIPT_PATH="$INSTALL_DIR/session-status-server.py"
+
+    mkdir -p "$SYSTEMD_DIR"
+
+    cat > "$SERVICE_FILE" << EOF
+[Unit]
+Description=ZellijConnect Session Status Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${PYTHON3} ${SCRIPT_PATH}
+Restart=on-failure
+RestartSec=5
+Environment=SESSION_SERVER_PORT=${SERVICE_PORT}
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable session-status-server
+    systemctl --user restart session-status-server
+    sleep 2
+
+    if curl -s "http://localhost:$SERVICE_PORT/api/health" >/dev/null 2>&1; then
+        ok "systemd user service installed and running"
+    else
+        warn "Service may not be ready yet"
+        warn "Check: journalctl --user -u session-status-server -n 20"
+    fi
+}
+
+# ── Restart Service ───────────────────────────────────────────────────────────
+restart_service() {
+    if [ "$OS" = "macos" ]; then
+        local PLIST="$HOME/Library/LaunchAgents/com.zellijconnect.session-status-server.plist"
+        if [ -f "$PLIST" ]; then
+            launchctl unload "$PLIST" 2>/dev/null || true
+            sleep 1
+            launchctl load "$PLIST"
+            sleep 2
+            if curl -s "http://localhost:$SERVICE_PORT/api/health" >/dev/null 2>&1; then
+                ok "Service restarted successfully"
+            else
+                warn "Service may not be ready yet, check logs"
+            fi
+        else
+            warn "LaunchAgent not installed. Run ./install.sh first."
+        fi
+    elif [ "$OS" = "linux" ]; then
+        if systemctl --user is-enabled session-status-server >/dev/null 2>&1; then
+            systemctl --user restart session-status-server
+            sleep 2
+            if curl -s "http://localhost:$SERVICE_PORT/api/health" >/dev/null 2>&1; then
+                ok "Service restarted successfully"
+            else
+                warn "Service may not be ready yet, check logs"
+            fi
+        else
+            warn "systemd service not installed. Run ./install.sh first."
+        fi
+    fi
+}
+
+# ── Claude Code Hooks ─────────────────────────────────────────────────────────
+configure_claude_hooks() {
+    local HOOK_CMD="$INSTALL_DIR/claude-status-hook.sh"
+    mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
+
+    if [ -f "$CLAUDE_SETTINGS" ]; then
+        cp "$CLAUDE_SETTINGS" "$CLAUDE_SETTINGS.backup.$(date +%Y%m%d%H%M%S)"
+
+        if grep -q "claude-status-hook" "$CLAUDE_SETTINGS" 2>/dev/null; then
+            ok "Claude hooks already configured in $CLAUDE_SETTINGS"
+            return
+        fi
+
+        warn "Existing $CLAUDE_SETTINGS found but hooks not configured."
+        echo "    Add these hooks manually to $CLAUDE_SETTINGS:"
+        print_hooks_json "$HOOK_CMD"
+    else
+        # Create new settings file
+        cat > "$CLAUDE_SETTINGS" << EOF
 {
   "hooks": {
     "SessionStart": [
       {
-        "hooks": [{
-          "type": "command",
-          "command": "~/.local/bin/claude-status-hook.sh session-start"
-        }]
+        "hooks": [{"type": "command", "command": "${HOOK_CMD} session-start"}]
       }
     ],
     "PreToolUse": [
       {
         "matcher": "*",
-        "hooks": [{
-          "type": "command",
-          "command": "~/.local/bin/claude-status-hook.sh pre-tool"
-        }]
+        "hooks": [{"type": "command", "command": "${HOOK_CMD} pre-tool"}]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "*",
-        "hooks": [{
-          "type": "command",
-          "command": "~/.local/bin/claude-status-hook.sh post-tool"
-        }]
+        "hooks": [{"type": "command", "command": "${HOOK_CMD} post-tool"}]
       }
     ],
     "Notification": [
       {
-        "hooks": [{
-          "type": "command",
-          "command": "~/.local/bin/claude-status-hook.sh notification"
-        }]
+        "hooks": [{"type": "command", "command": "${HOOK_CMD} notification"}]
       }
     ],
     "Stop": [
       {
-        "hooks": [{
-          "type": "command",
-          "command": "~/.local/bin/claude-status-hook.sh stop"
-        }]
+        "hooks": [{"type": "command", "command": "${HOOK_CMD} stop"}]
       }
     ]
   }
 }
 EOF
-    echo "      Created $CLAUDE_SETTINGS with hooks"
-fi
+        ok "Created $CLAUDE_SETTINGS with hooks"
+    fi
+}
 
-echo ""
-echo "=== Installation Complete ==="
-echo ""
-echo "Server running at: http://localhost:7601"
-echo ""
-echo "Test with:"
-echo "  curl http://localhost:7601/api/sessions | jq"
-echo ""
-echo "View logs:"
-echo "  tail -f /tmp/session-status-server.log"
-echo ""
-echo "Don't forget to add Zellij scroll keybindings!"
-echo "See README.md for ~/.config/zellij/config.kdl configuration."
+print_hooks_json() {
+    local HOOK_CMD="$1"
+    cat << EOF
+
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "${HOOK_CMD} session-start"}]}],
+    "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "${HOOK_CMD} pre-tool"}]}],
+    "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "${HOOK_CMD} post-tool"}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "${HOOK_CMD} notification"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "${HOOK_CMD} stop"}]}]
+  }
+
+EOF
+}
+
+# ── Zellij Config Check ───────────────────────────────────────────────────────
+check_zellij_config() {
+    local ZELLIJ_CONFIG="$HOME/.config/zellij/config.kdl"
+    if [ -f "$ZELLIJ_CONFIG" ] && grep -q "Ctrl Shift Alt k" "$ZELLIJ_CONFIG"; then
+        ok "Zellij scroll keybindings already configured"
+    else
+        warn "Add scroll keybindings to $ZELLIJ_CONFIG:"
+        cat << 'EOF'
+
+    keybinds {
+        shared {
+            bind "Ctrl Shift Alt k" { ScrollUp; }
+            bind "Ctrl Shift Alt j" { ScrollDown; }
+        }
+    }
+
+EOF
+    fi
+}
+
+# ── Server Test ───────────────────────────────────────────────────────────────
+test_server() {
+    if curl -s "http://localhost:$SERVICE_PORT/api/health" >/dev/null 2>&1; then
+        local SESSION_COUNT
+        SESSION_COUNT=$(curl -s "http://localhost:$SERVICE_PORT/api/sessions" | \
+            "$PYTHON3" -c "import sys,json; d=json.load(sys.stdin); print(len(d['sessions']))" 2>/dev/null || echo "?")
+        ok "Server running at http://localhost:$SERVICE_PORT"
+        ok "Active sessions: $SESSION_COUNT"
+        echo ""
+        echo "Test with:"
+        echo "  curl http://localhost:$SERVICE_PORT/api/sessions | python3 -m json.tool"
+    else
+        err "Server not responding on port $SERVICE_PORT"
+    fi
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+case "$MODE" in
+    install)   do_install "false" ;;
+    update)    do_install "true" ;;
+    uninstall) do_uninstall ;;
+esac
