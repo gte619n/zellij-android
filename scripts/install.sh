@@ -246,9 +246,16 @@ install_launchagent() {
     # Unload existing service if running
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
 
+    # Detect cargo bin path for zellij
+    local CARGO_BIN="${HOME}/.cargo/bin"
+    if [ ! -d "$CARGO_BIN" ]; then
+        CARGO_BIN="/usr/local/bin"
+    fi
+
     # Generate plist with correct paths
     sed -e "s|PYTHON3_PATH|${PYTHON3}|g" \
         -e "s|SESSION_SERVER_SCRIPT_PATH|${SCRIPT_PATH}|g" \
+        -e "s|CARGO_BIN_PATH|${CARGO_BIN}|g" \
         "$SCRIPT_DIR/com.zellijconnect.session-status-server.plist" \
         > "$PLIST_DEST"
 
@@ -282,6 +289,7 @@ ExecStart=${PYTHON3} ${SCRIPT_PATH}
 Restart=on-failure
 RestartSec=5
 Environment=SESSION_SERVER_PORT=${SERVICE_PORT}
+Environment=PATH=${HOME}/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 StandardOutput=journal
 StandardError=journal
 
