@@ -92,6 +92,8 @@
     <string name="text_input_title">Enter Text</string>
     <string name="text_input_hint">Type or dictate your text here\u2026</string>
     <string name="text_input_send">Send</string>
+    <string name="template_pm_plan">Interview</string>
+    <string name="template_pm_plan_text">Assume that you are a project manager and senior level developer. Given the project statement above, become expertly familiar with the goals and challenges in the code base. From there, interview me in detail using the AskUserQuestionTool about literally anything: technical implementation, UI &amp; UX, concerns, tradeoffs, etc. but make sure the questions are not obvious. be very in-depth and continue interviewing me continually until it\'s complete, then write the spec to a file in the docs/plans directory. This specification document should have a record of the phases of development for this feature and a way to determine what has been implemented, what is remaining, what has been tested, and what has been pushed. In addition, please do not neglect the testing approach and the definition of done. For testing, make sure we\'re testing not only the technical implementation, but the functional implementation as well. Create clear demarcations for success and be able to design a way for the agent to verify before marking anything as done.</string>
 
     <!-- Session Delete -->
     <string name="kill_session_title">Kill Session?</string>

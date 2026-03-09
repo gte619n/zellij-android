@@ -25,6 +25,7 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.net.Uri;
 
+import com.google.android.material.chip.Chip;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.appcompat.app.AlertDialog;
 
@@ -651,34 +652,34 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
 
             if (webView != null) {
                 if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP) {
-                    // Send Ctrl+Shift+Alt+K for scroll up (configure in Zellij)
+                    // Send Page Up
                     webView.evaluateJavascript(
                         "(function() {" +
                         "  var el = document.activeElement || document.body;" +
                         "  el.dispatchEvent(new KeyboardEvent('keydown', {" +
-                        "    key: 'k', code: 'KeyK', keyCode: 75, which: 75," +
-                        "    ctrlKey: true, shiftKey: true, altKey: true, bubbles: true" +
+                        "    key: 'PageUp', code: 'PageUp', keyCode: 33, which: 33," +
+                        "    bubbles: true" +
                         "  }));" +
                         "  el.dispatchEvent(new KeyboardEvent('keyup', {" +
-                        "    key: 'k', code: 'KeyK', keyCode: 75, which: 75," +
-                        "    ctrlKey: true, shiftKey: true, altKey: true, bubbles: true" +
+                        "    key: 'PageUp', code: 'PageUp', keyCode: 33, which: 33," +
+                        "    bubbles: true" +
                         "  }));" +
                         "})();",
                         null
                     );
                     return true;
                 } else if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_DOWN) {
-                    // Send Ctrl+Shift+Alt+J for scroll down (configure in Zellij)
+                    // Send Page Down
                     webView.evaluateJavascript(
                         "(function() {" +
                         "  var el = document.activeElement || document.body;" +
                         "  el.dispatchEvent(new KeyboardEvent('keydown', {" +
-                        "    key: 'j', code: 'KeyJ', keyCode: 74, which: 74," +
-                        "    ctrlKey: true, shiftKey: true, altKey: true, bubbles: true" +
+                        "    key: 'PageDown', code: 'PageDown', keyCode: 34, which: 34," +
+                        "    bubbles: true" +
                         "  }));" +
                         "  el.dispatchEvent(new KeyboardEvent('keyup', {" +
-                        "    key: 'j', code: 'KeyJ', keyCode: 74, which: 74," +
-                        "    ctrlKey: true, shiftKey: true, altKey: true, bubbles: true" +
+                        "    key: 'PageDown', code: 'PageDown', keyCode: 34, which: 34," +
+                        "    bubbles: true" +
                         "  }));" +
                         "})();",
                         null
@@ -722,6 +723,14 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                     imeSwitchManager.showKeyboard(wv);
                 }
             }
+        });
+
+        // Template chip: Interview — sends directly and closes dialog
+        Chip chipPmPlan = dialogView.findViewById(R.id.chipPmPlan);
+        chipPmPlan.setOnClickListener(v -> {
+            String template = getString(R.string.template_pm_plan_text);
+            typeTextIntoTerminal(template);
+            dialog.dismiss();
         });
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
