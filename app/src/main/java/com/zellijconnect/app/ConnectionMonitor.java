@@ -22,6 +22,7 @@ public class ConnectionMonitor {
     private final Set<String> errorTabs = new HashSet<>();
     private int retryAttempt = 0;
     private Runnable pendingRetry;
+    private boolean dismissed = false;
 
     public ConnectionMonitor(LinearLayout errorBanner, Button retryButton, WebViewPool webViewPool) {
         this.errorBanner = errorBanner;
@@ -29,11 +30,21 @@ public class ConnectionMonitor {
         this.webViewPool = webViewPool;
 
         retryButton.setOnClickListener(v -> retryNow());
+
+        // Tap anywhere on the banner to dismiss it
+        errorBanner.setOnClickListener(v -> dismiss());
+    }
+
+    /** Dismiss the banner without retrying. Auto-retry continues in background. */
+    public void dismiss() {
+        dismissed = true;
+        hideBanner();
     }
 
     public void onError(String tabId) {
-        errorTabs.add(tabId);
-        showBanner();
+        boolean isNew = errorTabs.add(tabId);
+        if (isNew) dismissed = false; // reset dismiss on new error
+        if (!dismissed) showBanner();
         scheduleRetry(tabId);
     }
 
@@ -41,6 +52,7 @@ public class ConnectionMonitor {
         errorTabs.remove(tabId);
         if (errorTabs.isEmpty()) {
             hideBanner();
+            dismissed = false;
             retryAttempt = 0;
             cancelPendingRetry();
         }

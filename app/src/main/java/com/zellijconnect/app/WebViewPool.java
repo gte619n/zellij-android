@@ -103,6 +103,11 @@ public class WebViewPool {
 
         webView.addJavascriptInterface(new ClipboardBridge(context), "ZellijClipboard");
         webView.addJavascriptInterface(new TerminalReadyBridge(tabId), "ZellijTerminalReady");
+        TouchBridge touchBridge = new TouchBridge(context);
+        if (linkCallback != null) {
+            touchBridge.setLinkOpenCallback(url1 -> linkCallback.onExternalLink(url1));
+        }
+        webView.addJavascriptInterface(touchBridge, "ZellijTouch");
         webView.loadUrl(url);
 
         return webView;
@@ -192,6 +197,8 @@ public class WebViewPool {
                 // to avoid interfering with page initialization
                 view.postDelayed(() -> {
                     view.evaluateJavascript(getTerminalReadyScript(), null);
+                    // Inject touch selection & link detection bridge
+                    view.evaluateJavascript(TouchBridge.getInjectionScript(), null);
                 }, 1000);
                 // Notify URL change for tab label updates
                 if (navigationCallback != null) navigationCallback.onUrlChanged(tabId, url);
