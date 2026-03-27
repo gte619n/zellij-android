@@ -30,6 +30,7 @@
     <string name="open_browser">Open Browser</string>
     <string name="connecting">Connecting\u2026</string>
     <string name="escape_key">Escape</string>
+    <string name="paste">Paste</string>
 
     <!-- Settings -->
     <string name="settings">Settings</string>

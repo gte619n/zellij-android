@@ -123,7 +123,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         connectingIndicator.setOnClickListener(v -> v.setVisibility(View.GONE));
         tabStrip = findViewById(R.id.tabStrip);
         Button btnRetry = findViewById(R.id.btnRetry);
-        Button btnEscape = findViewById(R.id.btnEscape);
+        ImageButton btnPaste = findViewById(R.id.btnPaste);
         ImageButton btnAddTab = findViewById(R.id.btnAddTab);
         ImageButton btnFileBrowser = findViewById(R.id.btnFileBrowser);
         ImageButton btnOpenBrowser = findViewById(R.id.btnOpenBrowser);
@@ -190,7 +190,7 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         setupTabStrip();
 
         // Button listeners
-        btnEscape.setOnClickListener(v -> sendEscapeKey());
+        btnPaste.setOnClickListener(v -> pasteClipboard());
         btnAddTab.setOnClickListener(v -> showSessionPicker());
         btnFileBrowser.setOnClickListener(v -> openFileBrowser());
         btnOpenBrowser.setOnClickListener(v -> openBrowser());
@@ -301,21 +301,38 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         }
     }
 
-    private void sendEscapeKey() {
+    private void pasteClipboard() {
+        android.content.ClipboardManager clipboard =
+            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard == null || !clipboard.hasPrimaryClip()) return;
+        android.content.ClipData clip = clipboard.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) return;
+        CharSequence text = clip.getItemAt(0).getText();
+        if (text == null || text.length() == 0) return;
+
         TabManager.Tab active = tabManager.getActiveTab();
-        if (active != null) {
-            WebView webView = webViewPool.get(active.id);
-            if (webView != null) {
-                webView.evaluateJavascript(
-                    "(function() {" +
-                    "  var el = document.activeElement || document.body;" +
-                    "  el.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true}));" +
-                    "  el.dispatchEvent(new KeyboardEvent('keyup', {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true}));" +
-                    "})();",
-                    null
-                );
-            }
-        }
+        if (active == null) return;
+        WebView webView = webViewPool.get(active.id);
+        if (webView == null) return;
+
+        String escaped = text.toString()
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r");
+        webView.evaluateJavascript(
+            "(function() {" +
+            "  var text = '" + escaped + "';" +
+            "  var target = document.querySelector('.xterm-helper-textarea') || document.activeElement || document.body;" +
+            "  var ev = new ClipboardEvent('paste', {" +
+            "    bubbles: true, cancelable: true," +
+            "    clipboardData: new DataTransfer()" +
+            "  });" +
+            "  ev.clipboardData.setData('text/plain', text);" +
+            "  target.dispatchEvent(ev);" +
+            "})();",
+            null
+        );
     }
 
     private void showSettings() {
@@ -762,26 +779,24 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         WebView webView = webViewPool.get(active.id);
         if (webView == null) return;
 
-        // Also copy to clipboard as fallback
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        if (clipboard != null) {
-            ClipData clip = ClipData.newPlainText("TextInput", text);
-            clipboard.setPrimaryClip(clip);
-        }
-
-        // Focus the WebView and textarea first
+        String escaped = text
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r");
         webView.requestFocus();
         webView.evaluateJavascript(
             "(function() {" +
-            "  var textarea = document.querySelector('.xterm-helper-textarea');" +
-            "  if (textarea) textarea.focus();" +
-            "  return !!textarea;" +
+            "  var text = '" + escaped + "';" +
+            "  var target = document.querySelector('.xterm-helper-textarea') || document.activeElement || document.body;" +
+            "  var ev = new ClipboardEvent('paste', {" +
+            "    bubbles: true, cancelable: true," +
+            "    clipboardData: new DataTransfer()" +
+            "  });" +
+            "  ev.clipboardData.setData('text/plain', text);" +
+            "  target.dispatchEvent(ev);" +
             "})();",
-            result -> {
-                Log.d("ZellijConnect", "Textarea focused, sending " + text.length() + " chars one at a time via InputConnection");
-                // Small delay to ensure focus, then send characters
-                webView.postDelayed(() -> sendCharacterByCharacter(webView, text, 0), 100);
-            }
+            null
         );
     }
 
