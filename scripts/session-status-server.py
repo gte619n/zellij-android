@@ -6,8 +6,9 @@ Provides a REST API for querying Zellij session information, Claude Code status,
 and git branch status. Designed to work with the ZellijConnect Android app.
 
 Endpoints:
-  GET /api/sessions - List all sessions with status
-  GET /api/health   - Health check
+  GET  /api/sessions        - List all sessions with status
+  GET  /api/health          - Health check
+  POST /api/restart-zellij  - Kill all Zellij sessions and restart server
 
 Binds to port 7601 by default.
 """
@@ -207,7 +208,7 @@ class SessionStatusHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
@@ -237,6 +238,7 @@ class SessionStatusHandler(http.server.BaseHTTPRequestHandler):
 <ul>
 <li><a href="/api/sessions">/api/sessions</a> - List all sessions</li>
 <li><a href="/api/health">/api/health</a> - Health check</li>
+<li>POST <a href="/api/restart-zellij">/api/restart-zellij</a> - Restart Zellij server</li>
 </ul>
 </body>
 </html>'''
@@ -245,6 +247,72 @@ class SessionStatusHandler(http.server.BaseHTTPRequestHandler):
         else:
             self._set_headers(404)
             self.wfile.write(json.dumps({'error': 'Not found'}).encode())
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+
+        if path == '/api/restart-zellij':
+            self._handle_restart_zellij()
+        else:
+            self._set_headers(404)
+            self.wfile.write(json.dumps({'error': 'Not found'}).encode())
+
+    def _handle_restart_zellij(self):
+        """Kill all Zellij sessions and orphaned processes, then verify recovery."""
+        errors = []
+
+        # Step 1: Kill all zellij sessions
+        sessions = get_zellij_sessions()
+        for name in sessions:
+            result = run_command(f'zellij kill-session {name}', timeout=5)
+            if result is None:
+                errors.append(f'Failed to kill session: {name}')
+
+        # Step 2: Kill any orphaned zellij processes (except the web UI server if separate)
+        run_command('pkill -f "zellij" 2>/dev/null', timeout=5)
+
+        # Step 3: Brief wait for processes to die
+        time.sleep(2)
+
+        # Step 4: Clean up all status files
+        if STATUS_DIR.exists():
+            for f in STATUS_DIR.iterdir():
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+
+        # Step 5: Clear session CWD map
+        if SESSION_CWD_MAP_FILE.exists():
+            try:
+                save_session_cwd_map({})
+            except Exception:
+                pass
+
+        # Step 6: Invalidate cache
+        _cache['data'] = None
+        _cache['timestamp'] = 0
+
+        # Step 7: Verify zellij is responsive (list-sessions should work even with 0 sessions)
+        verify = run_command('zellij list-sessions -n 2>/dev/null', timeout=5)
+        zellij_responsive = verify is not None or verify == ''
+
+        if zellij_responsive and not errors:
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                'success': True,
+                'sessionsKilled': len(sessions),
+                'message': f'Killed {len(sessions)} session(s). Zellij is responsive.'
+            }).encode())
+        else:
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                'success': True,
+                'sessionsKilled': len(sessions),
+                'message': f'Killed {len(sessions)} session(s). Errors: {"; ".join(errors)}' if errors
+                    else f'Killed {len(sessions)} session(s). Zellij may need manual restart.',
+                'errors': errors
+            }).encode())
 
     def do_DELETE(self):
         parsed = urlparse(self.path)

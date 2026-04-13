@@ -25,12 +25,18 @@ import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.json.JSONObject;
 
 public class SettingsDialog extends Dialog {
 
@@ -52,6 +58,8 @@ public class SettingsDialog extends Dialog {
     private Spinner spinnerDefaultIme;
     private Button btnTestConnection;
     private TextView txtTestResult;
+    private Button btnRestartZellij;
+    private TextView txtRestartResult;
 
     private List<InputMethodInfo> enabledImes;
     private List<String> imeLabels;
@@ -90,6 +98,8 @@ public class SettingsDialog extends Dialog {
         TextView txtAppVersion = findViewById(R.id.txtAppVersion);
         btnTestConnection = findViewById(R.id.btnTestConnection);
         txtTestResult = findViewById(R.id.txtTestResult);
+        btnRestartZellij = findViewById(R.id.btnRestartZellij);
+        txtRestartResult = findViewById(R.id.txtRestartResult);
         Button btnSave = findViewById(R.id.btnSettingsSave);
         Button btnCancel = findViewById(R.id.btnSettingsCancel);
 
@@ -114,6 +124,7 @@ public class SettingsDialog extends Dialog {
 
         // Button listeners
         btnTestConnection.setOnClickListener(v -> testConnection());
+        btnRestartZellij.setOnClickListener(v -> confirmRestartZellij());
         btnSave.setOnClickListener(v -> saveSettings());
         btnCancel.setOnClickListener(v -> dismiss());
     }
@@ -288,6 +299,91 @@ public class SettingsDialog extends Dialog {
             } finally {
                 if (channel != null) try { channel.disconnect(); } catch (Exception ignored) {}
                 if (session != null) try { session.disconnect(); } catch (Exception ignored) {}
+                executor.shutdown();
+            }
+        });
+    }
+
+    private void confirmRestartZellij() {
+        Context ctx = getContext();
+        new android.app.AlertDialog.Builder(ctx)
+                .setTitle(R.string.restart_zellij_confirm_title)
+                .setMessage(R.string.restart_zellij_confirm_message)
+                .setPositiveButton(R.string.restart_zellij_confirm_button, (dialog, which) -> restartZellij())
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void restartZellij() {
+        Context ctx = getContext();
+
+        String baseUrl = editBaseUrl.getText().toString().trim();
+        String host;
+        try {
+            java.net.URL url = new java.net.URL(baseUrl);
+            host = url.getHost();
+        } catch (Exception e) {
+            host = baseUrl.replaceAll("https?://", "").replaceAll("[:/].*", "");
+        }
+
+        int metadataPort;
+        try {
+            metadataPort = Integer.parseInt(editMetadataPort.getText().toString().trim());
+        } catch (NumberFormatException e) {
+            metadataPort = 7601;
+        }
+
+        btnRestartZellij.setEnabled(false);
+        txtRestartResult.setText(R.string.restart_zellij_restarting);
+        txtRestartResult.setTextColor(ctx.getColor(com.google.android.material.R.color.material_on_surface_emphasis_medium));
+        txtRestartResult.setVisibility(android.view.View.VISIBLE);
+
+        final String apiUrl = "https://" + host + ":" + metadataPort + "/api/restart-zellij";
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            try {
+                URL url = new URL(apiUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(30000);
+                conn.setRequestProperty("Content-Type", "application/json");
+
+                int responseCode = conn.getResponseCode();
+                StringBuilder response = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(
+                                responseCode >= 400 ? conn.getErrorStream() : conn.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+                }
+
+                JSONObject json = new JSONObject(response.toString());
+                boolean success = json.optBoolean("success", false);
+                int sessionsKilled = json.optInt("sessionsKilled", 0);
+                String message = json.optString("message", "");
+
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    if (success) {
+                        txtRestartResult.setText(ctx.getString(R.string.restart_zellij_success, sessionsKilled));
+                        txtRestartResult.setTextColor(ctx.getColor(com.google.android.material.R.color.material_deep_teal_200));
+                    } else {
+                        txtRestartResult.setText(ctx.getString(R.string.restart_zellij_failed, message));
+                        txtRestartResult.setTextColor(ctx.getColor(com.google.android.material.R.color.design_default_color_error));
+                    }
+                    btnRestartZellij.setEnabled(true);
+                });
+            } catch (Exception e) {
+                final String errorMsg = e.getMessage();
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    txtRestartResult.setText(ctx.getString(R.string.restart_zellij_failed, errorMsg));
+                    txtRestartResult.setTextColor(ctx.getColor(com.google.android.material.R.color.design_default_color_error));
+                    btnRestartZellij.setEnabled(true);
+                });
+            } finally {
                 executor.shutdown();
             }
         });
