@@ -76,6 +76,10 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
     // Cache of last fetched sessions for file browser CWD lookup
     private List<SessionInfo> cachedSessions = new ArrayList<>();
 
+    // True while the terminal selection overlay is shown. Suppresses IME-driven
+    // layout shifts so the selection geometry stays stable.
+    private volatile boolean selectionModeActive = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -94,8 +98,9 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
         View mainLayout = findViewById(R.id.webViewContainer);
         ViewCompat.setOnApplyWindowInsetsListener(mainLayout, (v, windowInsets) -> {
             Insets imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
-            // Apply bottom padding for keyboard
-            v.setPadding(0, 0, 0, imeInsets.bottom);
+            // While selection overlay is up, ignore IME insets so the terminal doesn't reflow.
+            int bottom = selectionModeActive ? 0 : imeInsets.bottom;
+            v.setPadding(0, 0, 0, bottom);
             // Notify terminal of resize
             TabManager.Tab active = tabManager != null ? tabManager.getActiveTab() : null;
             if (active != null && webViewPool != null) {
@@ -637,6 +642,40 @@ public class MainActivity extends AppCompatActivity implements TabManager.Listen
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         );
+    }
+
+    // --- Selection mode (terminal text selection overlay) ---
+
+    /**
+     * Called from TouchBridge when the text-selection overlay enters/leaves.
+     * While active, the keyboard is hidden and IME-driven layout resize is
+     * suppressed so the overlay geometry stays aligned with the terminal.
+     */
+    public void setSelectionModeActive(boolean active) {
+        runOnUiThread(() -> {
+            selectionModeActive = active;
+            View mainLayout = findViewById(R.id.webViewContainer);
+            if (active) {
+                // Dismiss the keyboard so the overlay isn't sitting over a shifted layout.
+                InputMethodManager imm =
+                    (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                View focused = getCurrentFocus();
+                if (imm != null) {
+                    View token = focused != null ? focused : mainLayout;
+                    if (token != null && token.getWindowToken() != null) {
+                        imm.hideSoftInputFromWindow(token.getWindowToken(), 0);
+                    }
+                }
+                getWindow().setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+            } else {
+                getWindow().setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            }
+            if (mainLayout != null) {
+                ViewCompat.requestApplyInsets(mainLayout);
+            }
+        });
     }
 
     // --- IME Switching ---

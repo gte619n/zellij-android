@@ -63,6 +63,20 @@ public class TouchBridge {
         Log.d(TAG, "TouchBridge JS: " + message);
     }
 
+    @JavascriptInterface
+    public void enterSelectionMode() {
+        if (context instanceof MainActivity) {
+            ((MainActivity) context).setSelectionModeActive(true);
+        }
+    }
+
+    @JavascriptInterface
+    public void exitSelectionMode() {
+        if (context instanceof MainActivity) {
+            ((MainActivity) context).setSelectionModeActive(false);
+        }
+    }
+
     public static String getInjectionScript() {
         return "(" + TOUCH_BRIDGE_JS + ")();";
     }
@@ -262,6 +276,9 @@ public class TouchBridge {
         "    if (btn) btn.remove();\n" +
         "    overlay = null;\n" +
         "    window.getSelection().removeAllRanges();\n" +
+        "    if (typeof ZellijTouch !== 'undefined' && ZellijTouch.exitSelectionMode) {\n" +
+        "      try { ZellijTouch.exitSelectionMode(); } catch(e) {}\n" +
+        "    }\n" +
         "  }\n" +
         "\n" +
         "  // ── banner ──\n" +
@@ -327,7 +344,29 @@ public class TouchBridge {
         "        var term = getTerminal();\n" +
         "        if (!term) return;\n" +
         "        if (navigator.vibrate) navigator.vibrate(30);\n" +
-        "        showSelectionOverlay(term, touchStartX, touchStartY);\n" +
+        "        // Capture cell under finger BEFORE the layout reflows (keyboard may be up).\n" +
+        "        var cellPos = touchToCell(term, touchStartX, touchStartY);\n" +
+        "        // Take xterm's hidden textarea out of focus so the IME doesn't re-open\n" +
+        "        // mid-selection.\n" +
+        "        var helper = document.querySelector('.xterm-helper-textarea');\n" +
+        "        if (helper && typeof helper.blur === 'function') helper.blur();\n" +
+        "        // Ask the activity to hide the keyboard and freeze the layout.\n" +
+        "        if (typeof ZellijTouch !== 'undefined' && ZellijTouch.enterSelectionMode) {\n" +
+        "          try { ZellijTouch.enterSelectionMode(); } catch(e) {}\n" +
+        "        }\n" +
+        "        // Wait for the layout to settle, then recompute viewport coords from the\n" +
+        "        // captured cell and show the overlay against the new terminal rect.\n" +
+        "        setTimeout(function() {\n" +
+        "          var scr = document.querySelector('.xterm-screen');\n" +
+        "          var rect = scr ? scr.getBoundingClientRect() : null;\n" +
+        "          var cell = getCellSize(term);\n" +
+        "          var x = touchStartX, y = touchStartY;\n" +
+        "          if (rect && cellPos) {\n" +
+        "            x = rect.left + (cellPos.col + 0.5) * cell.width;\n" +
+        "            y = rect.top + (cellPos.row + 0.5) * cell.height;\n" +
+        "          }\n" +
+        "          showSelectionOverlay(term, x, y);\n" +
+        "        }, 200);\n" +
         "      }, LONG_PRESS_MS);\n" +
         "    }, { passive: true });\n" +
         "\n" +
