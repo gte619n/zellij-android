@@ -250,35 +250,98 @@ public class WebViewPool {
     private static String getTokenAutofillScript(Context ctx) {
         String token = AppConfig.getZellijToken(ctx).replace("\\", "\\\\").replace("'", "\\'");
         return "(function() {\n" +
-            "  if (window.__zellijTokenFilled) return;\n" +
+            "  if (window.__zellijTokenObserverInstalled) { try { window.__zellijTryFillToken && window.__zellijTryFillToken(); } catch(e){} return; }\n" +
+            "  window.__zellijTokenObserverInstalled = true;\n" +
             "  var token = '" + token + "';\n" +
-            "  // Find password or text input fields (Zellij token form)\n" +
-            "  var inputs = document.querySelectorAll('input[type=\"password\"], input[type=\"text\"]');\n" +
-            "  if (inputs.length === 0) return;\n" +
-            "  for (var i = 0; i < inputs.length; i++) {\n" +
-            "    var input = inputs[i];\n" +
-            "    // Set value using native setter to trigger React/framework change events\n" +
+            "\n" +
+            "  function findDialog() {\n" +
+            "    // Identify the Zellij auth dialog by its AUTHENTICATE button\n" +
+            "    var buttons = document.querySelectorAll('button, input[type=\"submit\"]');\n" +
+            "    for (var i = 0; i < buttons.length; i++) {\n" +
+            "      var btn = buttons[i];\n" +
+            "      var text = (btn.textContent || btn.value || '').trim().toUpperCase();\n" +
+            "      if (text !== 'AUTHENTICATE') continue;\n" +
+            "      // Walk up to find a container that also holds a password input\n" +
+            "      var node = btn;\n" +
+            "      while (node && node !== document.body) {\n" +
+            "        var input = node.querySelector && node.querySelector('input[type=\"password\"], input[type=\"text\"]');\n" +
+            "        if (input) return { container: node, input: input, button: btn };\n" +
+            "        node = node.parentElement;\n" +
+            "      }\n" +
+            "    }\n" +
+            "    return null;\n" +
+            "  }\n" +
+            "\n" +
+            "  function tryFillTokenDialog() {\n" +
+            "    var found = findDialog();\n" +
+            "    if (!found) return;\n" +
+            "    if (found.container.__zellijFilled) return;\n" +
+            "    found.container.__zellijFilled = true;\n" +
             "    var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;\n" +
-            "    nativeSetter.call(input, token);\n" +
+            "    nativeSetter.call(found.input, token);\n" +
+            "    found.input.dispatchEvent(new Event('input', { bubbles: true }));\n" +
+            "    found.input.dispatchEvent(new Event('change', { bubbles: true }));\n" +
+            "    // Pre-fill only: the user presses AUTHENTICATE manually. Auto-clicking\n" +
+            "    // here caused an infinite re-submit loop when the token was expired/invalid.\n" +
+            "    addTokenControls(found.input);\n" +
+            "    try { found.input.focus(); } catch (e) {}\n" +
+            "  }\n" +
+            "\n" +
+            "  function setInputValue(input, val) {\n" +
+            "    var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;\n" +
+            "    nativeSetter.call(input, val);\n" +
             "    input.dispatchEvent(new Event('input', { bubbles: true }));\n" +
             "    input.dispatchEvent(new Event('change', { bubbles: true }));\n" +
             "  }\n" +
-            "  // Try to find and click the submit button\n" +
-            "  var buttons = document.querySelectorAll('button[type=\"submit\"], button, input[type=\"submit\"]');\n" +
-            "  for (var j = 0; j < buttons.length; j++) {\n" +
-            "    var btn = buttons[j];\n" +
-            "    var text = (btn.textContent || btn.value || '').toLowerCase();\n" +
-            "    if (text.indexOf('connect') >= 0 || text.indexOf('submit') >= 0 || text.indexOf('login') >= 0 || text.indexOf('enter') >= 0 || text.indexOf('ok') >= 0) {\n" +
-            "      btn.click();\n" +
-            "      window.__zellijTokenFilled = true;\n" +
-            "      return;\n" +
+            "\n" +
+            "  function addTokenControls(input) {\n" +
+            "    if (input.__zellijControls) return;\n" +
+            "    input.__zellijControls = true;\n" +
+            "    var bar = document.createElement('div');\n" +
+            "    bar.style.cssText = 'display:flex;gap:8px;margin-top:8px;';\n" +
+            "    function mkBtn(label) {\n" +
+            "      var b = document.createElement('button');\n" +
+            "      b.type = 'button';\n" +
+            "      b.textContent = label;\n" +
+            "      b.style.cssText = 'flex:1;padding:8px;font-size:14px;cursor:pointer;border:1px solid #888;border-radius:4px;background:#2a2a2a;color:#eee;';\n" +
+            "      return b;\n" +
             "    }\n" +
+            "    var eyeBtn = mkBtn('\\uD83D\\uDC41 Show');\n" +
+            "    eyeBtn.addEventListener('click', function() {\n" +
+            "      if (input.type === 'password') { input.type = 'text'; eyeBtn.textContent = '\\uD83D\\uDD12 Hide'; }\n" +
+            "      else { input.type = 'password'; eyeBtn.textContent = '\\uD83D\\uDC41 Show'; }\n" +
+            "    });\n" +
+            "    var clearBtn = mkBtn('\\u2715 Clear');\n" +
+            "    clearBtn.addEventListener('click', function() {\n" +
+            "      setInputValue(input, '');\n" +
+            "      try { input.focus(); } catch (e) {}\n" +
+            "    });\n" +
+            "    bar.appendChild(eyeBtn);\n" +
+            "    bar.appendChild(clearBtn);\n" +
+            "    if (input.parentElement) input.parentElement.insertBefore(bar, input.nextSibling);\n" +
             "  }\n" +
-            "  // If no matching button text, click the first button\n" +
-            "  if (buttons.length > 0) {\n" +
-            "    buttons[0].click();\n" +
-            "    window.__zellijTokenFilled = true;\n" +
-            "  }\n" +
+            "  window.__zellijTryFillToken = tryFillTokenDialog;\n" +
+            "\n" +
+            "  // Initial attempt for dialogs already in the DOM\n" +
+            "  tryFillTokenDialog();\n" +
+            "\n" +
+            "  // Watch for the dialog appearing later (e.g. after WebSocket reconnect)\n" +
+            "  var pending = false;\n" +
+            "  var observer = new MutationObserver(function(mutations) {\n" +
+            "    // Cheap pre-filter: only scan when added nodes mention AUTHENTICATE\n" +
+            "    var relevant = false;\n" +
+            "    for (var i = 0; i < mutations.length && !relevant; i++) {\n" +
+            "      var added = mutations[i].addedNodes;\n" +
+            "      for (var j = 0; j < added.length; j++) {\n" +
+            "        var n = added[j];\n" +
+            "        if (n.nodeType === 1 && ((n.textContent || '').toUpperCase().indexOf('AUTHENTICATE') >= 0)) { relevant = true; break; }\n" +
+            "      }\n" +
+            "    }\n" +
+            "    if (!relevant || pending) return;\n" +
+            "    pending = true;\n" +
+            "    setTimeout(function() { pending = false; tryFillTokenDialog(); }, 50);\n" +
+            "  });\n" +
+            "  observer.observe(document.body, { childList: true, subtree: true });\n" +
             "})();";
     }
 
