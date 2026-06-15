@@ -47,6 +47,20 @@ public class WebViewPool {
         }
     }
 
+    // JavaScript interface for two-way token persistence: when the user submits
+    // a (possibly new) token in Zellij's auth dialog, mirror it back into Anvil's
+    // saved settings so the next auto-fill uses it.
+    public class TokenBridge {
+        @android.webkit.JavascriptInterface
+        public void saveToken(String token) {
+            if (token == null) return;
+            String trimmed = token.trim();
+            if (trimmed.isEmpty()) return;
+            if (trimmed.equals(AppConfig.getZellijToken(context))) return;
+            AppConfig.setZellijToken(context, trimmed);
+        }
+    }
+
     public interface ErrorCallback {
         void onError(String tabId);
         void onErrorCleared(String tabId);
@@ -94,6 +108,7 @@ public class WebViewPool {
         if (existing != null) {
             // Ensure JavaScript interfaces are attached (might be missing on old WebViews)
             existing.addJavascriptInterface(new TerminalReadyBridge(tabId), "ZellijTerminalReady");
+            existing.addJavascriptInterface(new TokenBridge(), "ZellijToken");
             return existing;
         }
 
@@ -103,6 +118,7 @@ public class WebViewPool {
 
         webView.addJavascriptInterface(new ClipboardBridge(context), "ZellijClipboard");
         webView.addJavascriptInterface(new TerminalReadyBridge(tabId), "ZellijTerminalReady");
+        webView.addJavascriptInterface(new TokenBridge(), "ZellijToken");
         TouchBridge touchBridge = new TouchBridge(context);
         if (linkCallback != null) {
             touchBridge.setLinkOpenCallback(url1 -> linkCallback.onExternalLink(url1));
@@ -281,10 +297,32 @@ public class WebViewPool {
             "    nativeSetter.call(found.input, token);\n" +
             "    found.input.dispatchEvent(new Event('input', { bubbles: true }));\n" +
             "    found.input.dispatchEvent(new Event('change', { bubbles: true }));\n" +
+            "    // Default 'Remember me' to checked so re-auth is needed less often.\n" +
+            "    var remember = (found.container.querySelector && found.container.querySelector('input[type=\"checkbox\"]')) || document.querySelector('#remember');\n" +
+            "    if (remember && !remember.checked) {\n" +
+            "      remember.checked = true;\n" +
+            "      remember.dispatchEvent(new Event('input', { bubbles: true }));\n" +
+            "      remember.dispatchEvent(new Event('change', { bubbles: true }));\n" +
+            "    }\n" +
             "    // Pre-fill only: the user presses AUTHENTICATE manually. Auto-clicking\n" +
             "    // here caused an infinite re-submit loop when the token was expired/invalid.\n" +
             "    addTokenControls(found.input);\n" +
+            "    persistOnSubmit(found.input, found.button);\n" +
             "    try { found.input.focus(); } catch (e) {}\n" +
+            "  }\n" +
+            "\n" +
+            "  // Two-way sync: when the user authenticates with a (possibly edited)\n" +
+            "  // token, mirror the live field value back into Anvil's saved settings.\n" +
+            "  function persistOnSubmit(input, button) {\n" +
+            "    if (input.__zellijPersistHooked) return;\n" +
+            "    input.__zellijPersistHooked = true;\n" +
+            "    function save() {\n" +
+            "      try {\n" +
+            "        if (window.ZellijToken && ZellijToken.saveToken) ZellijToken.saveToken(input.value);\n" +
+            "      } catch (e) {}\n" +
+            "    }\n" +
+            "    if (button) button.addEventListener('click', save);\n" +
+            "    input.addEventListener('keydown', function(e) { if (e.key === 'Enter') save(); });\n" +
             "  }\n" +
             "\n" +
             "  function setInputValue(input, val) {\n" +
@@ -294,11 +332,24 @@ public class WebViewPool {
             "    input.dispatchEvent(new Event('change', { bubbles: true }));\n" +
             "  }\n" +
             "\n" +
+            "  // Toggling input.type drops the field out of the page's\n" +
+            "  // `input[type=\"password\"]` CSS rule, collapsing it to an unstyled\n" +
+            "  // box. Pin the rendered look as inline styles so show/hide is in-place.\n" +
+            "  var STYLE_PROPS = ['width','height','paddingTop','paddingRight','paddingBottom','paddingLeft','marginTop','marginRight','marginBottom','marginLeft','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','boxSizing','backgroundColor','color','fontFamily','fontSize','lineHeight'];\n" +
+            "  function pinFieldStyle(input) {\n" +
+            "    if (input.__zellijStylePinned) return;\n" +
+            "    input.__zellijStylePinned = true;\n" +
+            "    var cs = window.getComputedStyle(input);\n" +
+            "    for (var i = 0; i < STYLE_PROPS.length; i++) {\n" +
+            "      try { input.style[STYLE_PROPS[i]] = cs[STYLE_PROPS[i]]; } catch (e) {}\n" +
+            "    }\n" +
+            "  }\n" +
+            "\n" +
             "  function addTokenControls(input) {\n" +
             "    if (input.__zellijControls) return;\n" +
             "    input.__zellijControls = true;\n" +
             "    var bar = document.createElement('div');\n" +
-            "    bar.style.cssText = 'display:flex;gap:8px;margin-top:8px;';\n" +
+            "    bar.style.cssText = 'display:flex;gap:8px;margin-top:0;margin-bottom:16px;';\n" +
             "    function mkBtn(label) {\n" +
             "      var b = document.createElement('button');\n" +
             "      b.type = 'button';\n" +
@@ -308,6 +359,7 @@ public class WebViewPool {
             "    }\n" +
             "    var eyeBtn = mkBtn('\\uD83D\\uDC41 Show');\n" +
             "    eyeBtn.addEventListener('click', function() {\n" +
+            "      pinFieldStyle(input);\n" +
             "      if (input.type === 'password') { input.type = 'text'; eyeBtn.textContent = '\\uD83D\\uDD12 Hide'; }\n" +
             "      else { input.type = 'password'; eyeBtn.textContent = '\\uD83D\\uDC41 Show'; }\n" +
             "    });\n" +
