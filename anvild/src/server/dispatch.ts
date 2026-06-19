@@ -4,6 +4,7 @@ import type { ConnState } from "./connection";
 import type { ConnectionRegistry } from "./registry";
 import type { PushRegistry } from "../push/registry";
 import { BadCommand, type Supervisor } from "../session/supervisor";
+import { listDirs } from "../fs/dirs";
 
 export interface DispatchDeps {
   push: PushRegistry;
@@ -148,6 +149,20 @@ export function dispatch(conn: ConnState, raw: string, send: Send, deps: Dispatc
         deps.supervisor.resolvePermission(cmd.requestId, cmd.decision, cmd.updatedInput);
         if (cid) send(ack(cid));
         return;
+
+      case "dirs.list": {
+        const listing = listDirs(cmd.path);
+        send({
+          v: PROTOCOL_VERSION,
+          type: "dirs.list.result",
+          ts: now(),
+          cid,
+          path: listing.path,
+          parent: listing.parent,
+          entries: listing.entries,
+        });
+        return;
+      }
 
       default: {
         const type = record.type;

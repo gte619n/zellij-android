@@ -1,7 +1,9 @@
 /**
  * Anvil wire protocol — shared contract between `anvild` (daemon) and all clients.
  *
- * Status: 0.2-draft (2026-06-19). Companion to `anvil-native-architecture.md` (§6, §8).
+ * Status: 0.3-draft (2026-06-19). Companion to `anvil-native-architecture.md` (§6, §8).
+ *   0.3: added dirs.list/dirs.list.result (browse the host FS to pick a cwd/repoRoot at
+ *        session-create time) + DirEntry.isRepo.
  *   0.2: added fs.list.result/fs.read.result (typed responses), push.unregister,
  *        FileContent.truncated + FsReadCmd.range, and the terminal-seq/log clarification —
  *        gaps surfaced by the implementation plans (anvil-impl-4/6).
@@ -180,6 +182,7 @@ export interface DirEntry {
   path: string;
   isDir: boolean;
   size?: number;
+  isRepo?: boolean; // dir contains a .git (useful for the session-create picker)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -309,6 +312,15 @@ export interface FsReadResultEvent extends Envelope {
   cid?: Cid;
   content: FileContent;
 }
+// dirs.list browses the daemon host's filesystem to pick a cwd/repoRoot at session-create
+// time (pre-session, so NOT scoped to a worktree). Single-user; the tailnet is the boundary.
+export interface DirsListResultEvent extends Envelope {
+  type: "dirs.list.result";
+  cid?: Cid;
+  path: string; // the resolved absolute dir that was listed
+  parent?: string; // its parent dir, if any (for an "up" affordance)
+  entries: DirEntry[]; // subdirectories only
+}
 // fs.changed is a live push for watched paths → session-scoped.
 export interface FsChangedEvent extends Envelope, SessionScoped {
   type: "fs.changed";
@@ -355,6 +367,7 @@ export type ServerEvent =
   // files
   | FsListResultEvent
   | FsReadResultEvent
+  | DirsListResultEvent
   | FsChangedEvent
   // terminal
   | TerminalDataEvent
@@ -449,6 +462,11 @@ export interface FsUnwatchCmd extends Envelope, Correlated {
   sessionId: SessionId;
   path: string;
 }
+/** Browse the daemon host's directories to pick a session cwd/repoRoot (pre-session). */
+export interface DirsListCmd extends Envelope, Correlated {
+  type: "dirs.list";
+  path?: string; // default: the daemon user's home directory
+}
 
 // 5d. Terminal (§7)
 
@@ -504,6 +522,7 @@ export type ClientCommand =
   | FsReadCmd
   | FsWatchCmd
   | FsUnwatchCmd
+  | DirsListCmd
   // terminal
   | TerminalOpenCmd
   | TerminalInputCmd

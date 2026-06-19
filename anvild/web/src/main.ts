@@ -3,6 +3,7 @@ import type {
   Budget,
   ContentBlock,
   ConversationEvent,
+  DirsListResultEvent,
   PermissionSuggestion,
   ServerEvent,
   Session,
@@ -25,6 +26,21 @@ const seqStore = {
   get: (id: string): number => Number(localStorage.getItem(`anvil.seq.${id}`) ?? 0),
   set: (id: string, seq: number): void => localStorage.setItem(`anvil.seq.${id}`, String(seq)),
 };
+
+// ── Theme (system default + persisted toggle) ────────────────────────────────
+function currentTheme(): "light" | "dark" {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+(function initTheme() {
+  const stored = localStorage.getItem("anvil.theme");
+  const theme = stored ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = theme;
+})();
+$("#theme-toggle").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("anvil.theme", next);
+});
 
 const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 const sock = new AnvilSocket(wsUrl, onEvent, onStatus);
@@ -68,6 +84,9 @@ function onEvent(e: ServerEvent): void {
       return;
     case "budget":
       renderBudget(e.budget);
+      return;
+    case "dirs.list.result":
+      onDirs?.(e);
       return;
     case "command.error":
       toast(e.message);
@@ -188,7 +207,7 @@ async function runMermaid(container: HTMLElement): Promise<void> {
   if (nodes.length === 0) return;
   if (!mermaidReady) {
     mermaidReady = import("mermaid").then((m) => {
-      m.default.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+      m.default.initialize({ startOnLoad: false, securityLevel: "strict", theme: currentTheme() === "dark" ? "dark" : "default" });
       return m.default;
     });
   }
@@ -247,31 +266,68 @@ input.addEventListener("keydown", (e) => {
 });
 
 // ── Modals ─────────────────────────────────────────────────────────────────────
+let onDirs: ((e: DirsListResultEvent) => void) | null = null;
+const browse = { path: "", parent: undefined as string | undefined };
+
 $("#new-session").addEventListener("click", showNewSession);
 function showNewSession(): void {
   const root = $("#modal-root");
   const m = document.createElement("div");
   m.className = "modal";
   m.innerHTML = `<div class="modal-box"><h3>New session</h3>
-    <label>Working directory<input id="ns-cwd" placeholder="/Users/you/project" /></label>
-    <label>Model<select id="ns-model"><option value="opus">Opus</option><option value="sonnet">Sonnet</option></select></label>
-    <label>Autonomy<select id="ns-auto"><option value="mostly-autonomous">Mostly autonomous</option><option value="allowlist">Allowlist</option><option value="prompt-all">Prompt all</option></select></label>
-    <div class="btns"><button id="ns-cancel">Cancel</button><button id="ns-create">Create</button></div></div>`;
+    <label>Source<select id="ns-source">
+      <option value="existing-dir">Existing directory</option>
+      <option value="fresh-worktree">Fresh git worktree (off this repo)</option>
+    </select></label>
+    <div class="browser">
+      <div class="browser-path"><button id="ns-up" title="Up">⬆</button><code id="ns-cur">…</code></div>
+      <ul id="ns-dirs" class="browser-list"></ul>
+    </div>
+    <div class="row">
+      <label>Model<select id="ns-model"><option value="opus">Opus</option><option value="sonnet">Sonnet</option></select></label>
+      <label>Autonomy<select id="ns-auto"><option value="mostly-autonomous">Mostly autonomous</option><option value="allowlist">Allowlist</option><option value="prompt-all">Prompt all</option></select></label>
+    </div>
+    <div class="btns"><button id="ns-cancel">Cancel</button><button id="ns-create">Create here</button></div></div>`;
   root.innerHTML = "";
   root.appendChild(m);
-  $<HTMLButtonElement>("#ns-cancel").onclick = () => (root.innerHTML = "");
-  $<HTMLButtonElement>("#ns-create").onclick = () => {
-    const cwd = $<HTMLInputElement>("#ns-cwd").value.trim();
-    if (!cwd) return;
-    sock.send({
-      type: "session.create",
-      source: "existing-dir",
-      cwd,
-      model: $<HTMLSelectElement>("#ns-model").value,
-      autonomy: $<HTMLSelectElement>("#ns-auto").value,
-    });
+
+  const close = () => {
+    onDirs = null;
     root.innerHTML = "";
   };
+
+  onDirs = (e) => {
+    browse.path = e.path;
+    browse.parent = e.parent;
+    $("#ns-cur").textContent = e.path;
+    $<HTMLButtonElement>("#ns-up").disabled = !e.parent;
+    const ul = $("#ns-dirs");
+    ul.innerHTML = "";
+    for (const d of e.entries) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span>📁 ${esc(d.name)}</span>${d.isRepo ? '<span class="repo">git</span>' : ""}`;
+      li.onclick = () => sock.send({ type: "dirs.list", path: d.path });
+      ul.appendChild(li);
+    }
+  };
+
+  $<HTMLButtonElement>("#ns-up").onclick = () => {
+    if (browse.parent) sock.send({ type: "dirs.list", path: browse.parent });
+  };
+  $<HTMLButtonElement>("#ns-cancel").onclick = close;
+  $<HTMLButtonElement>("#ns-create").onclick = () => {
+    if (!browse.path) return;
+    const source = $<HTMLSelectElement>("#ns-source").value;
+    const common = { model: $<HTMLSelectElement>("#ns-model").value, autonomy: $<HTMLSelectElement>("#ns-auto").value };
+    if (source === "fresh-worktree") {
+      sock.send({ type: "session.create", source, repoRoot: browse.path, base: "HEAD", ...common });
+    } else {
+      sock.send({ type: "session.create", source, cwd: browse.path, ...common });
+    }
+    close();
+  };
+
+  sock.send({ type: "dirs.list" }); // start browsing at the daemon user's home
 }
 function showPermission(requestId: string, tool: string, inputObj: unknown, suggestions: PermissionSuggestion[]): void {
   const root = $("#modal-root");
