@@ -9,6 +9,7 @@ assertSubscriptionAuth();
 const config = loadConfig();
 const renderer = await createMarkdownRenderer(); // loads Shiki grammars once at startup
 const { port } = createServer({
+  host: config.host,
   port: config.port,
   stateDir: config.stateDir,
   warnFraction: config.warnFraction,

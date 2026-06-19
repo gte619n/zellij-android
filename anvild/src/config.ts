@@ -1,5 +1,6 @@
 /** Runtime configuration, resolved from the environment. */
 export interface Config {
+  host: string;
   port: number;
   stateDir: string;
   /** Budget warn threshold as a fraction of the Opus pool (arch §3). */
@@ -15,6 +16,8 @@ function expandHome(p: string, home: string): string {
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const home = env.HOME ?? ".";
   return {
+    // localhost-only by default — Tailscale serve is the access boundary (arch §4.1).
+    host: env.ANVIL_HOST ?? "127.0.0.1",
     port: Number(env.ANVIL_PORT ?? 7701),
     stateDir: expandHome(env.ANVIL_STATE_DIR ?? "~/.anvil", home),
     warnFraction: Number(env.ANVIL_BUDGET_WARN ?? 0.8),

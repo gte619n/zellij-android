@@ -47,6 +47,7 @@ export interface ServerHandle {
 }
 
 export interface ServerOptions {
+  host?: string;
   port: number;
   stateDir: string;
   warnFraction?: number;
@@ -74,6 +75,7 @@ export function createServer(opts: ServerOptions): ServerHandle {
   );
 
   const server = Bun.serve<ConnState>({
+    hostname: opts.host ?? "127.0.0.1",
     port: opts.port,
     async fetch(req, srv) {
       const url = new URL(req.url);
