@@ -33,6 +33,7 @@ export interface SupervisorConfig {
   stateDir: string;
   warnFraction?: number;
   softStopFraction?: number;
+  renderer?: MarkdownRenderer;
 }
 
 /**
@@ -47,11 +48,12 @@ export class Supervisor {
   private readonly drivers = new Map<string, AgentDriver>();
   private readonly logs = new Map<string, EventLog>();
   private readonly broker = new PermissionBroker();
-  private readonly renderer: MarkdownRenderer = new PassthroughRenderer();
+  private readonly renderer: MarkdownRenderer;
   private readonly agentEnv = buildAgentEnv();
   private readonly budgetTracker: BudgetTracker;
 
   constructor(cfg: SupervisorConfig, private readonly registry: ConnectionRegistry) {
+    this.renderer = cfg.renderer ?? new PassthroughRenderer();
     this.store = new SessionStore(cfg.stateDir);
     this.budgetTracker = new BudgetTracker({
       stateDir: cfg.stateDir,

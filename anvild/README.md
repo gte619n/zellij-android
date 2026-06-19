@@ -42,8 +42,17 @@ The daemon **refuses to start** if `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` 
       window, converts to an hours-estimate (calibratable), emits `budget` on connect + per turn,
       `warn` threshold + one-shot soft-stop advisory. Verified live (budget event after each turn).
 
-**Daemon core (M1–M8) complete.** Next: the markdown rendering pipeline (impl plan 2) replaces
-`PassthroughRenderer`; then terminal + file browser (plan 4); clients (plans 3, 5); push/ops (plan 6).
+**Daemon core (M1–M8) complete.**
+
+- [x] **Rendering pipeline (impl plan 2, daemon side)** — `src/render/markdown-pipeline.ts`:
+      markdown-it (with `data-line` source attrs) → Shiki dual-theme highlighting → KaTeX math
+      (`trust:false`) → DOMPurify (jsdom). Mermaid stays inert `<pre class="mermaid">` for the
+      WebView. Loaded once at startup; `render()` stays sync. Verified live: daemon emits real
+      Shiki/`data-line` HTML (CSS-var theming survives sanitization). `PassthroughRenderer`
+      remains the fallback when no renderer is injected.
+
+Remaining: the WebView bundle (plan 2, client side, ships with the clients); terminal + file
+browser (plan 4); clients (plans 3, 5); push/ops (plan 6).
 
 Note: the daemon runs with `settingSources: []` so it does NOT inherit your ambient Claude
 Code allow-rules — the daemon is the permission authority (arch §6.6). Trade-off: the repo's

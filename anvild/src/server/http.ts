@@ -6,6 +6,7 @@ import { dispatch } from "./dispatch";
 import { ConnectionRegistry } from "./registry";
 import { PushRegistry } from "../push/registry";
 import { Supervisor } from "../session/supervisor";
+import type { MarkdownRenderer } from "../render/markdown";
 import type { ConnState } from "./connection";
 
 export const VERSION = "0.1.0";
@@ -20,6 +21,7 @@ export interface ServerOptions {
   stateDir: string;
   warnFraction?: number;
   softStopFraction?: number;
+  renderer?: MarkdownRenderer;
 }
 
 /**
@@ -32,7 +34,12 @@ export function createServer(opts: ServerOptions): ServerHandle {
   const registry = new ConnectionRegistry();
   const push = new PushRegistry();
   const supervisor = new Supervisor(
-    { stateDir: opts.stateDir, warnFraction: opts.warnFraction, softStopFraction: opts.softStopFraction },
+    {
+      stateDir: opts.stateDir,
+      warnFraction: opts.warnFraction,
+      softStopFraction: opts.softStopFraction,
+      renderer: opts.renderer,
+    },
     registry,
   );
 
