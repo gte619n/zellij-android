@@ -120,9 +120,16 @@ export class Supervisor {
 
     if (cmd.source === "fresh-worktree") {
       if (!cmd.repoRoot) throw new BadCommand("repoRoot is required for a fresh-worktree session");
-      const created = createWorktree(cmd.repoRoot, cmd.base ?? "HEAD", slugify(cmd.title ?? "session"), this.store.worktreeRoot(), id);
-      cwd = created.cwd;
-      worktree = created.worktree;
+      const branch = slugify(cmd.title ?? "session");
+      try {
+        const created = createWorktree(cmd.repoRoot, cmd.base ?? "HEAD", branch, this.store.worktreeRoot(), id);
+        cwd = created.cwd;
+        worktree = created.worktree;
+      } catch (e) {
+        throw new BadCommand(
+          `Couldn't create worktree "${branch}": ${e instanceof Error ? e.message : String(e)} — try a different session name.`,
+        );
+      }
     } else {
       if (!cmd.cwd) throw new BadCommand("cwd is required for an existing-dir session");
       cwd = cmd.cwd;
@@ -202,7 +209,7 @@ export class Supervisor {
     this.drivers.delete(id);
     await s.stop(); // reap any attached process group (PTY in Phase 3)
     if (s.data.source === "fresh-worktree" && s.data.worktree) {
-      removeWorktree(s.data.worktree.repoRoot, s.data.cwd);
+      removeWorktree(s.data.worktree.repoRoot, s.data.cwd, s.data.worktree.branch);
     }
     rmSync(this.store.sessionDir(id), { recursive: true, force: true });
     this.sessions.delete(id);

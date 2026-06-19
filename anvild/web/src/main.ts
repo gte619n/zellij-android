@@ -13,6 +13,8 @@ import type {
 // ── DOM helpers ──────────────────────────────────────────────────────────────
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => document.querySelector(sel) as T;
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+const slugify = (s: string): string =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 const conversation = $("#conversation");
 const scrollDown = () => {
   conversation.scrollTop = conversation.scrollHeight;
@@ -337,8 +339,10 @@ function showNewSession(): void {
     m.innerHTML = `<div class="modal-box" id="ns-modal"><h3>New session</h3>
       <label>Environment<div class="env-row"><select id="ns-env">${opts}</select><button type="button" id="ns-addenv" title="Add environment">＋</button></div></label>
       <label>Session name<input id="ns-name" placeholder="e.g. fix-login-bug" /></label>
+      <p class="small muted" id="ns-note"></p>
+      <p class="small warn-text" id="ns-warn"></p>
       ${MODEL_AUTONOMY}
-      <div class="btns"><button type="button" id="ns-cancel">Cancel</button><button type="button" id="ns-create">Create worktree</button></div>
+      <div class="btns"><button type="button" id="ns-cancel">Cancel</button><button type="button" id="ns-create">Create</button></div>
       <p class="small muted"><a id="ns-oneoff" href="#">or work in a one-off folder…</a></p></div>`;
   }
   root.innerHTML = "";
@@ -351,21 +355,51 @@ function showNewSession(): void {
     e.preventDefault();
     showOneOff();
   });
-  document.getElementById("ns-name")?.focus();
-  document.getElementById("ns-create")?.addEventListener("click", () => {
-    const env = environments.get($<HTMLSelectElement>("#ns-env").value);
-    const name = $<HTMLInputElement>("#ns-name").value.trim();
+  const envSel = document.getElementById("ns-env") as HTMLSelectElement | null;
+  const nameInp = document.getElementById("ns-name") as HTMLInputElement | null;
+  const createBtn = document.getElementById("ns-create") as HTMLButtonElement | null;
+  const note = document.getElementById("ns-note");
+  const warn = document.getElementById("ns-warn");
+
+  const validate = (): void => {
+    if (!envSel || !nameInp || !createBtn) return;
+    const env = environments.get(envSel.value);
+    const name = nameInp.value.trim();
+    const slug = slugify(name);
+    const dup = !!env && slug.length > 0 && [...sessions.values()].some((s) => s.environmentId === env.id && slugify(s.title) === slug);
+    if (note) {
+      note.textContent = !env
+        ? ""
+        : env.isRepo
+          ? slug
+            ? `→ fresh worktree on branch “${slug}”`
+            : "Creates a fresh git worktree."
+          : `Works directly in ${env.repoRoot} (no worktree).`;
+    }
+    if (warn) warn.textContent = dup ? `A session named “${name}” already exists in this environment.` : "";
+    createBtn.disabled = !env || !name || dup;
+  };
+  envSel?.addEventListener("change", validate);
+  nameInp?.addEventListener("input", validate);
+  nameInp?.focus();
+  validate();
+
+  createBtn?.addEventListener("click", () => {
+    if (!envSel || !nameInp) return;
+    const env = environments.get(envSel.value);
+    const name = nameInp.value.trim();
     if (!env || !name) return;
-    sock.send({
-      type: "session.create",
-      source: "fresh-worktree",
-      repoRoot: env.repoRoot,
-      base: env.defaultBase ?? "HEAD",
+    const common = {
       title: name,
       environmentId: env.id,
       model: $<HTMLSelectElement>("#ns-model").value,
       autonomy: $<HTMLSelectElement>("#ns-auto").value,
-    });
+    };
+    if (env.isRepo) {
+      sock.send({ type: "session.create", source: "fresh-worktree", repoRoot: env.repoRoot, base: env.defaultBase ?? "HEAD", ...common });
+    } else {
+      sock.send({ type: "session.create", source: "existing-dir", cwd: env.repoRoot, ...common });
+    }
     closeModal();
   });
 }
@@ -377,7 +411,7 @@ function showAddEnvironment(): void {
   m.className = "modal";
   m.innerHTML = `<div class="modal-box"><h3>Add environment</h3>
     <label>Name<input id="ae-name" placeholder="e.g. OXOS Bots" /></label>
-    <p class="small muted">Pick the project's git repo (look for the “git” badge):</p>
+    <p class="small muted">Pick a project repo (gets worktrees) or any folder:</p>
     ${browserMarkup()}
     <div class="btns"><button type="button" id="ae-back">Back</button><button type="button" id="ae-save">Add</button></div></div>`;
   root.innerHTML = "";

@@ -90,7 +90,8 @@ export interface Worktree {
 export interface Environment {
   id: string;
   name: string; // display name, e.g. "OXOS Bots"
-  repoRoot: string; // absolute path to the git repo
+  repoRoot: string; // absolute path
+  isRepo: boolean; // git repo → fresh worktree per session; otherwise work in the folder directly
   defaultBase?: string; // branch/commit to branch worktrees from (default "HEAD")
 }
 

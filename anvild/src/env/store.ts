@@ -25,15 +25,16 @@ export class EnvironmentStore {
     return this.environments.find((e) => e.id === id);
   }
 
-  /** @throws if `repoRoot` is not a git repository. */
+  /** @throws if `repoRoot` doesn't exist. A git repo → worktrees; any other dir → work directly. */
   add(name: string, repoRoot: string, defaultBase?: string): Environment {
-    if (!existsSync(join(repoRoot, ".git"))) {
-      throw new Error(`not a git repository: ${repoRoot}`);
+    if (!existsSync(repoRoot)) {
+      throw new Error(`no such directory: ${repoRoot}`);
     }
     const env: Environment = {
       id: newId("env"),
       name: name.trim() || (repoRoot.split("/").filter(Boolean).pop() ?? "environment"),
       repoRoot,
+      isRepo: existsSync(join(repoRoot, ".git")),
       defaultBase,
     };
     this.environments.push(env);

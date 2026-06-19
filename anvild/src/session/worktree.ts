@@ -14,35 +14,36 @@ export interface CreatedWorktree {
 }
 
 /**
- * Create a fresh git worktree off `base` (arch §5). Branch: `anvil/<slug>-<shortid>`;
- * checked out at `<worktreeRoot>/<sessionId>`.
+ * Create a fresh git worktree off `base` (arch §5) on branch `branch` (the session name),
+ * checked out at `<worktreeRoot>/<sessionId>`. Throws if the branch already exists so the
+ * caller can ask for a different name.
  */
 export function createWorktree(
   repoRoot: string,
   base: string,
-  slug: string,
+  branch: string,
   worktreeRoot: string,
   sessionId: string,
 ): CreatedWorktree {
-  const branch = `anvil/${slug}-${sessionId.slice(-8)}`;
   const cwd = join(worktreeRoot, sessionId);
   const r = git(["worktree", "add", "-b", branch, cwd, base], repoRoot);
   if (r.code !== 0) {
-    throw new Error(`git worktree add failed: ${r.stderr.trim() || r.stdout.trim()}`);
+    throw new Error(r.stderr.trim() || r.stdout.trim() || "git worktree add failed");
   }
   return { worktree: { repoRoot, branch, base }, cwd };
 }
 
 /**
- * Remove a worktree (arch §5 kill cleanup): `git worktree remove --force`, falling back to
- * rmtree + `git worktree prune` if git refuses (e.g. dirty or already-detached).
+ * Remove a worktree (arch §5 kill cleanup): `git worktree remove --force` (rmtree + prune
+ * fallback), then delete the branch so the session name is reusable.
  */
-export function removeWorktree(repoRoot: string, cwd: string): void {
+export function removeWorktree(repoRoot: string, cwd: string, branch?: string): void {
   const r = git(["worktree", "remove", "--force", cwd], repoRoot);
   if (r.code !== 0) {
     rmSync(cwd, { recursive: true, force: true });
     git(["worktree", "prune"], repoRoot);
   }
+  if (branch) git(["branch", "-D", branch], repoRoot); // free the name (best-effort)
 }
 
 /** Best-effort git state for the worktree panel (arch §8); undefined if `cwd` isn't a repo. */

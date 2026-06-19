@@ -87,7 +87,7 @@ test("fresh-worktree session: create checks out a worktree, kill removes it", as
     title: "feature work",
   });
   expect(s.data.source).toBe("fresh-worktree");
-  expect(s.data.worktree?.branch).toContain("anvil/feature-work-");
+  expect(s.data.worktree?.branch).toBe("feature-work");
   expect(existsSync(s.data.cwd)).toBe(true);
 
   await sup.kill(s.id);

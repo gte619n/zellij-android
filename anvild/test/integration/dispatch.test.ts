@@ -82,10 +82,10 @@ test("connecting client receives a session.list on open", async () => {
   expect(Array.isArray(list.sessions)).toBe(true);
 });
 
-test("env.add rejects a non-git path", async () => {
-  const r = await rpc({ ...base, type: "env.add", cid: "e1", name: "x", repoRoot: stateDir });
+test("env.add rejects a nonexistent path", async () => {
+  const r = await rpc({ ...base, type: "env.add", cid: "e1", name: "x", repoRoot: "/no/such/dir/anvil-xyz" });
   expect(r.type).toBe("command.error");
-  expect(r.message).toContain("not a git repository");
+  expect(r.message).toContain("no such directory");
 });
 
 test("push.register with cid → ack", async () => {

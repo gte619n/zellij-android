@@ -96,6 +96,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); }
 .modal-box .muted { color: var(--muted); }
 .modal-box .small { font-size: 12px; }
 .modal-box .small a { color: var(--accent); }
+.modal-box .warn-text { color: var(--warn); margin: 2px 0 0; min-height: 1em; }
+.modal-box button:disabled { opacity: 0.5; cursor: default; }
 .env-row { display: flex; gap: 8px; margin-top: 4px; }
 .env-row select { flex: 1; }
 .env-row button { padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; }

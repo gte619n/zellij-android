@@ -26,7 +26,7 @@ test("create + remove a fresh worktree off HEAD", () => {
   const created = createWorktree(repo, "HEAD", "my-task", wtRoot, "sess_abcd1234");
   expect(existsSync(created.cwd)).toBe(true);
   expect(existsSync(join(created.cwd, "README.md"))).toBe(true);
-  expect(created.worktree.branch).toContain("anvil/my-task-");
+  expect(created.worktree.branch).toBe("my-task");
   expect(created.worktree.repoRoot).toBe(repo);
 
   // gitStatus resolves the worktree branch
