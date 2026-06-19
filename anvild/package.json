@@ -1,0 +1,17 @@
+{
+  "name": "anvild",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Anvil daemon — supervises Claude Code sessions and serves the Anvil protocol over Tailscale.",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "dev": "bun --watch src/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}
