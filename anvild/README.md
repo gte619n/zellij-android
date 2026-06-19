@@ -77,6 +77,25 @@ tailscale serve --bg --https=443 http://localhost:7701
 
 Rebuild with `bun run build:web` after editing `web/src`. Typecheck with `bun run typecheck:web`.
 
+## Service (macOS LaunchAgent)
+
+```sh
+./scripts/service.sh install     # build web, install + load the LaunchAgent, wire tailscale serve
+./scripts/service.sh status      # service state + /api/health
+./scripts/service.sh restart     # kickstart
+./scripts/service.sh logs        # tail the daemon log
+./scripts/service.sh uninstall   # bootout + remove plist/launcher (keeps state)
+```
+
+Installs `~/.local/bin/anvild-launch` (sources `~/.config/anvil/env`, unsets
+`ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` — arch §3) and
+`~/Library/LaunchAgents/com.anvil.anvild.plist` (`RunAtLoad` + `KeepAlive`). No secrets in
+the plist. Logs to `~/.local/state/anvil/`. Starts at login and restarts on crash.
+
+Note: launchd applies a restart-backoff penalty if the job is killed rapidly many times in
+a row (e.g. during testing); `kickstart`/`./scripts/service.sh restart` force-starts past it.
+Normal operation and reboot are unaffected.
+
 Note: the daemon runs with `settingSources: []` so it does NOT inherit your ambient Claude
 Code allow-rules — the daemon is the permission authority (arch §6.6). Trade-off: the repo's
 `CLAUDE.md` isn't auto-loaded; project-context injection is a later item.
