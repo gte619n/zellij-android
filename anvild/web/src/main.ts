@@ -447,12 +447,7 @@ function clearConversation(): void {
   streaming = null;
   thinkingEl = null; // detached by the innerHTML reset
 }
-const EMPTY_ART = `<svg class="empty-art" viewBox="0 0 200 130" width="150" height="98" aria-hidden="true" fill="currentColor">
-  <rect x="30" y="40" width="140" height="22" rx="6" />
-  <path d="M30 42 L8 51 L30 60 Z" />
-  <rect x="86" y="60" width="28" height="34" />
-  <rect x="54" y="92" width="92" height="16" rx="5" />
-</svg>`;
+const EMPTY_ART = `<img src="/anvil.svg" class="empty-art" alt="Anvil" width="132" height="132" />`;
 function renderEmptyState(): void {
   streaming = null;
   thinkingEl = null;
