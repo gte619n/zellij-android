@@ -1,7 +1,9 @@
 /**
  * Anvil wire protocol — shared contract between `anvild` (daemon) and all clients.
  *
- * Status: 0.4-draft (2026-06-19). Companion to `anvil-native-architecture.md` (§6, §8).
+ * Status: 0.5-draft (2026-06-20). Companion to `anvil-native-architecture.md` (§6, §8).
+ *   0.5: git lifecycle — `git` command (status/diff/commit/push/create-pr/merge-pr) +
+ *        git.result event; session.archive/unarchive + Session.archived.
  *   0.4: added Environment registry — environments event + env.list/env.add/env.remove,
  *        Session/SessionCreateCmd.environmentId. Pick an environment + name → fresh worktree.
  *   0.3: added dirs.list/dirs.list.result (browse the host FS to pick a cwd/repoRoot at
@@ -127,6 +129,7 @@ export interface Session {
   id: SessionId;
   title: string;
   environmentId?: string; // the Environment this session was created from, if any
+  archived?: boolean; // archived = inactive (driver stopped), kept for reference; not deleted
   cwd: string;
   source: SessionSource;
   worktree?: Worktree; // present when source === "fresh-worktree"
@@ -241,6 +244,17 @@ export interface BudgetEvent extends Envelope {
 export interface EnvironmentsEvent extends Envelope {
   type: "environments";
   environments: Environment[];
+}
+/** Result of a git/gh operation (arch §8) — carries combined output for display. */
+export type GitOp = "status" | "diff" | "commit" | "push" | "create-pr" | "merge-pr";
+export interface GitResultEvent extends Envelope {
+  type: "git.result";
+  cid?: Cid;
+  sessionId: SessionId;
+  op: GitOp;
+  ok: boolean;
+  output: string; // combined stdout+stderr
+  url?: string; // PR url for create-pr
 }
 /** Generic ack for a correlated command that has no richer response. */
 export interface AckEvent extends Envelope {
@@ -370,6 +384,7 @@ export type ServerEvent =
   | SessionDeletedEvent
   | BudgetEvent
   | EnvironmentsEvent
+  | GitResultEvent
   | AckEvent
   | CommandErrorEvent
   // conversation
@@ -426,8 +441,26 @@ export interface SessionDetachCmd extends Envelope, Correlated {
   sessionId: SessionId;
 }
 export interface SessionKillCmd extends Envelope, Correlated {
-  type: "session.kill";
+  type: "session.kill"; // delete: reap the agent, remove the worktree + branch + state
   sessionId: SessionId;
+}
+export interface SessionArchiveCmd extends Envelope, Correlated {
+  type: "session.archive"; // stop the driver, keep the worktree/branch/history
+  sessionId: SessionId;
+}
+export interface SessionUnarchiveCmd extends Envelope, Correlated {
+  type: "session.unarchive";
+  sessionId: SessionId;
+}
+/** Git / gh operations on the session's worktree (arch §8). */
+export interface GitCmd extends Envelope, Correlated {
+  type: "git";
+  sessionId: SessionId;
+  op: GitOp;
+  message?: string; // commit
+  title?: string; // create-pr
+  body?: string; // create-pr
+  method?: "merge" | "squash" | "rebase"; // merge-pr
 }
 export interface SessionSetModelCmd extends Envelope, Correlated {
   type: "session.set_model";
@@ -547,8 +580,11 @@ export type ClientCommand =
   | SessionAttachCmd
   | SessionDetachCmd
   | SessionKillCmd
+  | SessionArchiveCmd
+  | SessionUnarchiveCmd
   | SessionSetModelCmd
   | SessionSetAutonomyCmd
+  | GitCmd
   // conversation
   | PromptSendCmd
   | PermissionRespondCmd

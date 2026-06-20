@@ -105,6 +105,26 @@ export function dispatch(conn: ConnState, raw: string, send: Send, deps: Dispatc
           .catch((e) => send(cmdError(errMsg(e), cid)));
         return;
 
+      case "session.archive":
+        deps.supervisor
+          .archive(cmd.sessionId)
+          .then(() => {
+            if (cid) send(ack(cid));
+          })
+          .catch((e) => send(cmdError(errMsg(e), cid)));
+        return;
+
+      case "session.unarchive":
+        deps.supervisor.unarchive(cmd.sessionId);
+        if (cid) send(ack(cid));
+        return;
+
+      case "git": {
+        const result = deps.supervisor.gitOp(cmd);
+        send({ ...result, cid });
+        return;
+      }
+
       case "session.set_model":
         deps.supervisor.setModel(cmd.sessionId, cmd.model);
         if (cid) send(ack(cid));

@@ -10,6 +10,8 @@ import {
   type BudgetEvent,
   type Environment,
   type EnvironmentsEvent,
+  type GitCmd,
+  type GitResultEvent,
   type Model,
   type PermissionDecision,
   type ServerEvent,
@@ -32,6 +34,7 @@ import { BudgetTracker } from "../budget/tracker";
 import { EnvironmentStore } from "../env/store";
 import { AttachmentStore } from "../attach/store";
 import { listDir, readFile, resolveInside } from "../fs/session-fs";
+import * as git from "../git/ops";
 
 /** A client command that can't be honored (bad args, no such session). → command.error. */
 export class BadCommand extends Error {}
@@ -212,6 +215,86 @@ export class Supervisor {
     return `/api/sessions/${sessionId}/files?path=${encodeURIComponent(relPath)}`;
   }
 
+  // Git lifecycle (arch §8): operate on the session worktree, return combined output.
+  gitOp(cmd: GitCmd): GitResultEvent {
+    const s = this.require(cmd.sessionId);
+    const cwd = s.data.cwd;
+    const branch = s.data.worktree?.branch ?? "HEAD";
+    let ok = true;
+    let output = "";
+    let url: string | undefined;
+    switch (cmd.op) {
+      case "status": {
+        this.refreshGit(s);
+        output = s.data.git ? `${s.data.git.branch} — ${s.data.git.dirtyFileCount} changed, ${s.data.git.ahead} ahead / ${s.data.git.behind} behind` : "(not a git repo)";
+        break;
+      }
+      case "diff": {
+        const r = git.diff(cwd);
+        ok = r.ok;
+        output = r.output;
+        break;
+      }
+      case "commit": {
+        const r = git.commit(cwd, cmd.message?.trim() || "update");
+        ok = r.ok;
+        output = r.output;
+        this.refreshGit(s);
+        break;
+      }
+      case "push": {
+        const r = git.push(cwd, branch);
+        ok = r.ok;
+        output = r.output;
+        this.refreshGit(s);
+        break;
+      }
+      case "create-pr": {
+        const r = git.createPr(cwd, cmd.title?.trim() || s.data.title, cmd.body ?? "");
+        ok = r.ok;
+        output = r.output;
+        url = r.url;
+        break;
+      }
+      case "merge-pr": {
+        const r = git.mergePr(cwd, cmd.method ?? "squash");
+        ok = r.ok;
+        output = r.output;
+        break;
+      }
+    }
+    return { v: PROTOCOL_VERSION, type: "git.result", ts: now(), sessionId: cmd.sessionId, op: cmd.op, ok, output, url };
+  }
+  private refreshGit(s: Session): void {
+    const g = gitStatus(s.data.cwd);
+    if (g) {
+      s.data.git = g;
+      this.persist();
+      this.broadcastUpdated(s.data);
+    }
+  }
+
+  /** Archive: stop the agent + terminal/watchers, keep the worktree/branch/history. */
+  async archive(id: string): Promise<void> {
+    const s = this.require(id);
+    await this.drivers.get(id)?.stop();
+    this.drivers.delete(id);
+    this.clearWatchers(id);
+    this.killTerminal(id);
+    s.data.archived = true;
+    s.data.status = "idle";
+    s.data.lastActivityAt = now();
+    this.persist();
+    this.broadcastUpdated(s.data);
+  }
+  unarchive(id: string): void {
+    const s = this.require(id);
+    s.data.archived = false;
+    s.data.lastActivityAt = now();
+    this.persist();
+    this.broadcastUpdated(s.data);
+  }
+
   // Terminal channel (arch §7): a persistent PTY per session via Bun.Terminal.
   private readonly terminals = new Map<string, { pty: any; proc: any; scrollback: Buffer }>();
 
@@ -286,6 +369,10 @@ export class Supervisor {
   /** Send a user turn to the session's agent (arch §6.2), starting the driver lazily. */
   prompt(id: string, text: string, attachmentIds: string[] = []): void {
     const s = this.require(id);
+    if (s.data.archived) {
+      s.data.archived = false; // prompting reactivates an archived session
+      this.broadcastUpdated(s.data);
+    }
     const attachments = attachmentIds
       .map((aid) => this.attachStore.ref(id, aid))
       .filter((r): r is AttachmentRef => r !== undefined);

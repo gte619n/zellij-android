@@ -24,6 +24,8 @@ import type {
   DirsListResultEvent,
   Environment,
   FileContent,
+  GitOp,
+  GitResultEvent,
   PermissionSuggestion,
   ServerEvent,
   Session,
@@ -151,6 +153,7 @@ function onEvent(e: ServerEvent): void {
     case "session.updated":
       sessions.set(e.session.id, e.session);
       renderSessions();
+      if (e.session.id === activeId) updateGitPanelMeta();
       return;
     case "session.deleted":
       sessions.delete(e.sessionId);
@@ -176,6 +179,9 @@ function onEvent(e: ServerEvent): void {
       return;
     case "fs.read.result":
       renderReader(e.content);
+      return;
+    case "git.result":
+      if (e.sessionId === activeId) showGitResult(e);
       return;
     case "command.error":
       toast(e.message);
@@ -353,12 +359,14 @@ async function runMermaid(container: HTMLElement): Promise<void> {
 function renderSessions(): void {
   const ul = $("#session-list");
   ul.innerHTML = "";
-  for (const s of sessions.values()) {
+  const items = [...sessions.values()].sort((a, b) => Number(!!a.archived) - Number(!!b.archived));
+  for (const s of items) {
     const li = document.createElement("li");
-    li.className = `session${s.id === activeId ? " active" : ""}`;
+    li.className = `session${s.id === activeId ? " active" : ""}${s.archived ? " archived" : ""}`;
     const envName = s.environmentId ? environments.get(s.environmentId)?.name : undefined;
     const where = envName ?? s.git?.branch ?? s.source;
-    li.innerHTML = `<div class="title">${esc(s.title)}</div><div class="meta">${esc(where)} · ${esc(s.status)} · ${esc(s.model)}</div>`;
+    const tag = s.archived ? "archived" : esc(s.status);
+    li.innerHTML = `<div class="title">${esc(s.title)}</div><div class="meta">${esc(where)} · ${tag} · ${esc(s.model)}</div>`;
     li.onclick = () => selectSession(s.id);
     ul.appendChild(li);
   }
@@ -547,7 +555,7 @@ quoteBtn.addEventListener("mousedown", (e) => {
 // ── Side panel: files + reader (terminal lands next) ──────────────────────────────
 const panel = $("#side-panel");
 const panelContent = $("#panel-content");
-let panelView: "files" | "reader" | "terminal" | null = null;
+let panelView: "files" | "reader" | "git" | "terminal" | null = null;
 let filesPath = "";
 let readerPath = "";
 let readerWatch = "";
@@ -558,9 +566,10 @@ let termObs: ResizeObserver | null = null;
 function setPanelTabs(): void {
   document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.classList.toggle("active", t.dataset.view === panelView));
   $("#btn-files").classList.toggle("active", panelView === "files" || panelView === "reader");
+  $("#btn-git").classList.toggle("active", panelView === "git");
   $("#btn-terminal").classList.toggle("active", panelView === "terminal");
 }
-function openPanel(view: "files" | "reader" | "terminal"): void {
+function openPanel(view: "files" | "reader" | "git" | "terminal"): void {
   if (!activeId) {
     toast("Open a session first");
     return;
@@ -571,6 +580,7 @@ function openPanel(view: "files" | "reader" | "terminal"): void {
   setPanelTabs();
   if (view === "files") requestFiles(filesPath);
   else if (view === "reader" && !readerPath) requestFiles(filesPath);
+  else if (view === "git") renderGit();
   else if (view === "terminal") mountTerminal();
 }
 function closePanel(): void {
@@ -669,10 +679,84 @@ function renderReader(content: FileContent): void {
   const back = document.getElementById("reader-back");
   if (back) back.onclick = (e) => { e.preventDefault(); openPanel("files"); };
 }
+// ── Git panel ──────────────────────────────────────────────────────────────────
+function renderGit(): void {
+  panelView = "git";
+  setPanelTabs();
+  const s = activeId ? sessions.get(activeId) : undefined;
+  panelContent.innerHTML = `<div class="git-panel">
+    <div class="git-status"><span id="git-status-text">${gitStatusLine(s)}</span>
+      <button type="button" class="mini" id="git-refresh">↻</button>
+      <button type="button" class="mini" id="git-view-diff">diff</button></div>
+    <label class="small muted">Commit message<textarea id="git-msg" rows="2" placeholder="describe the change"></textarea></label>
+    <div class="git-row"><button type="button" id="git-commit">Commit</button><button type="button" id="git-push">Push</button></div>
+    <hr />
+    <label class="small muted">PR title<input id="git-pr-title" placeholder="${esc(s?.title ?? "")}" /></label>
+    <label class="small muted">PR body (optional)<textarea id="git-pr-body" rows="2"></textarea></label>
+    <div class="git-row">
+      <button type="button" id="git-pr">Create PR</button>
+      <select id="git-merge-method"><option value="squash">squash</option><option value="merge">merge</option><option value="rebase">rebase</option></select>
+      <button type="button" id="git-merge">Merge PR</button>
+    </div>
+    <hr />
+    <div class="git-row">
+      <button type="button" id="git-archive">${s?.archived ? "Unarchive" : "Archive"}</button>
+      <button type="button" class="danger" id="git-delete">Delete session</button>
+    </div>
+    <pre class="git-output" id="git-output"></pre>
+  </div>`;
+
+  const op = (o: GitOp, extra: Record<string, unknown> = {}): void => {
+    if (!activeId) return;
+    setGitOutput(`running ${o}…`);
+    sock.send({ type: "git", sessionId: activeId, op: o, ...extra });
+  };
+  $("#git-refresh").onclick = () => op("status");
+  $("#git-view-diff").onclick = () => op("diff");
+  $("#git-commit").onclick = () => op("commit", { message: $<HTMLTextAreaElement>("#git-msg").value });
+  $("#git-push").onclick = () => op("push");
+  $("#git-pr").onclick = () => op("create-pr", { title: $<HTMLInputElement>("#git-pr-title").value, body: $<HTMLTextAreaElement>("#git-pr-body").value });
+  $("#git-merge").onclick = () => op("merge-pr", { method: $<HTMLSelectElement>("#git-merge-method").value });
+  $("#git-archive").onclick = () => {
+    if (!activeId) return;
+    const archived = sessions.get(activeId)?.archived;
+    sock.send({ type: archived ? "session.unarchive" : "session.archive", sessionId: activeId });
+  };
+  $("#git-delete").onclick = () => {
+    if (activeId && confirm("Delete this session, its worktree, and branch? This can't be undone.")) {
+      sock.send({ type: "session.kill", sessionId: activeId });
+    }
+  };
+  op("status");
+}
+function gitStatusLine(s: Session | undefined): string {
+  const g = s?.git;
+  return g ? `${esc(g.branch)} · ${g.dirtyFileCount} changed · ${g.ahead}↑ ${g.behind}↓` : "(no git info)";
+}
+function updateGitPanelMeta(): void {
+  if (panelView !== "git") return;
+  const s = activeId ? sessions.get(activeId) : undefined;
+  const txt = document.getElementById("git-status-text");
+  if (txt) txt.innerHTML = gitStatusLine(s);
+  const arch = document.getElementById("git-archive");
+  if (arch) arch.textContent = s?.archived ? "Unarchive" : "Archive";
+}
+function setGitOutput(text: string): void {
+  const el = document.getElementById("git-output");
+  if (el) el.textContent = text;
+}
+function showGitResult(e: GitResultEvent): void {
+  const el = document.getElementById("git-output");
+  if (!el) return;
+  const head = e.ok ? "" : "⚠ failed\n";
+  el.innerHTML = esc(head + e.output).replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+}
+
 $("#btn-files").addEventListener("click", () => (panelView === "files" || panelView === "reader" ? closePanel() : openPanel("files")));
+$("#btn-git").addEventListener("click", () => (panelView === "git" ? closePanel() : openPanel("git")));
 $("#btn-terminal").addEventListener("click", () => (panelView === "terminal" ? closePanel() : openPanel("terminal")));
 $("#panel-close").addEventListener("click", closePanel);
-document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.addEventListener("click", () => openPanel(t.dataset.view as "files" | "reader" | "terminal")));
+document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.addEventListener("click", () => openPanel(t.dataset.view as "files" | "reader" | "git" | "terminal")));
 
 // ── Modals ─────────────────────────────────────────────────────────────────────
 let onDirs: ((e: DirsListResultEvent) => void) | null = null;
