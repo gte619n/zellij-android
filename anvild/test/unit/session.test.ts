@@ -62,8 +62,11 @@ test("supervisor persists sessions and a fresh instance restores them", () => {
   expect(sup2.list().map((x) => x.id)).toContain(id);
   // transient "thinking" is reset to idle on restore (no live agent after a restart)
   expect(restored!.data.status).toBe("idle");
-  // lastSeq survives the restart so resume can replay from it
-  expect(restored!.lastSeq).toBe(1);
+  // ...and the interrupted turn leaves a visible notice (seq 1 = status, seq 2 = notice)
+  expect(restored!.lastSeq).toBe(2);
+  const snap = sup2.resume(id, undefined).find((e) => e.type === "conversation.snapshot") as any;
+  const blocks = snap.events.at(-1).blocks;
+  expect(blocks[0].rendered.source).toContain("interrupted");
   rmSync(dir, { recursive: true, force: true });
 });
 

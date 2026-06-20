@@ -521,9 +521,16 @@ export class Supervisor {
   private restore(): void {
     const transient: SessionData["status"][] = ["thinking", "running_tool", "awaiting_permission"];
     for (const p of this.store.loadAll()) {
-      // a daemon restart means no live agent process — reset transient states to idle
-      if (transient.includes(p.data.status)) p.data.status = "idle";
-      this.sessions.set(p.data.id, this.wrap(p.data, p.lastSeq));
+      // a daemon restart/crash means no live agent process; a session caught mid-turn had its
+      // turn interrupted — reset to idle and leave a visible notice so it isn't silently lost.
+      const interrupted = transient.includes(p.data.status);
+      if (interrupted) p.data.status = "idle";
+      const session = this.wrap(p.data, p.lastSeq);
+      this.sessions.set(p.data.id, session);
+      if (interrupted) {
+        const notice = "⚠️ _The previous turn was interrupted by a daemon restart. Re-send your message to continue._";
+        session.emit({ type: "assistant.message", blocks: [{ kind: "markdown", rendered: this.renderer.render(notice) }] });
+      }
     }
   }
 
