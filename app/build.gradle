@@ -1,8 +1,9 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
-// Load local.properties for custom build config fields
+// Load local.properties for the daemon URL (overridable per machine; not committed)
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
@@ -17,20 +18,12 @@ android {
         applicationId "com.zellijconnect.app"
         minSdk 33
         targetSdk 35
-        versionCode 4
-        versionName "1.1.0"
+        versionCode 5
+        versionName "2.0.0"
 
-        // Inject local.properties values into BuildConfig
-        buildConfigField "String", "ZELLIJ_BASE_URL",
-            "\"${localProperties.getProperty('ZELLIJ_BASE_URL', 'https://localhost:7600')}\""
-        buildConfigField "String", "ZELLIJ_GATEWAY_PATH",
-            "\"${localProperties.getProperty('ZELLIJ_GATEWAY_PATH', '/gateway')}\""
-        buildConfigField "String", "TERMINAL_IME_ID",
-            "\"${localProperties.getProperty('TERMINAL_IME_ID', 'juloo.keyboard2/.Keyboard2')}\""
-        buildConfigField "String", "DEFAULT_IME_ID",
-            "\"${localProperties.getProperty('DEFAULT_IME_ID', 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME')}\""
-        buildConfigField "String", "ZELLIJ_TOKEN",
-            "\"${localProperties.getProperty('ZELLIJ_TOKEN', '')}\""
+        // The Anvil web client URL this shell loads (Tailscale HTTPS by default).
+        buildConfigField "String", "ANVIL_BASE_URL",
+            "\"${localProperties.getProperty('ANVIL_BASE_URL', 'https://mac-mini-m4.softshell-mark.ts.net:7701/')}\""
     }
 
     buildTypes {
@@ -48,9 +41,8 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
-
-    tasks.withType(JavaCompile).configureEach {
-        options.compilerArgs << "-Xlint:deprecation"
+    kotlinOptions {
+        jvmTarget = '21'
     }
 
     buildFeatures {
@@ -58,30 +50,9 @@ android {
     }
 }
 
-configurations.configureEach {
-    exclude group: 'org.jetbrains', module: 'annotations-java5'
-}
-
 dependencies {
-    implementation 'androidx.core:core:1.15.0'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.google.android.material:material:1.12.0'
-    implementation 'androidx.activity:activity:1.10.0'
-    implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.activity:activity-ktx:1.10.0'
     implementation 'androidx.webkit:webkit:1.12.1'
-
-    // SFTP file browser
-    implementation 'com.github.mwiede:jsch:0.2.21'
-
-    // Markdown rendering + syntax highlighting
-    def markwonVersion = '4.6.2'
-    implementation "io.noties.markwon:core:$markwonVersion"
-    implementation "io.noties.markwon:ext-strikethrough:$markwonVersion"
-    implementation "io.noties.markwon:ext-tables:$markwonVersion"
-    implementation "io.noties.markwon:ext-tasklist:$markwonVersion"
-    implementation "io.noties.markwon:linkify:$markwonVersion"
-    implementation "io.noties.markwon:image:$markwonVersion"
-    implementation "io.noties.markwon:syntax-highlight:$markwonVersion"
-    implementation 'io.noties:prism4j:2.0.0'
-    annotationProcessor 'io.noties:prism4j-bundler:2.0.0'
+    implementation 'com.google.android.material:material:1.12.0'
 }
