@@ -494,11 +494,12 @@ function clearConversation(): void {
   streaming = null;
   thinkingEl = null; // detached by the innerHTML reset
 }
-const EMPTY_ART = `<img src="/anvil.svg" class="empty-art" alt="Anvil" width="132" height="132" />`;
 function renderEmptyState(): void {
   streaming = null;
   thinkingEl = null;
-  conversation.innerHTML = `<div class="empty-state">${EMPTY_ART}<p>Select a session, or create a new one.</p></div>`;
+  // inlined (not a top-level const) so it's safe to call during early module init
+  conversation.innerHTML =
+    `<div class="empty-state"><img src="/anvil.svg" class="empty-art" alt="Anvil" width="132" height="132" /><p>Select a session, or create a new one.</p></div>`;
 }
 /** No session selected: reset the title, show the empty state, drop the persisted active id. */
 function deselectSession(): void {
