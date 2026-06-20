@@ -3,14 +3,16 @@ package com.gte619n.anvil
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import java.net.Inet4Address
 
 /**
- * Discovers this device's wireless-debugging "connect" endpoint via mDNS
- * (`_adb-tls-connect._tcp`), so the Mac can `adb connect <ip>:<port>`. The connect port changes
- * every time Wireless debugging restarts — this grabs the current one. (First-time setup still
- * needs a one-off manual pairing; after that, reconnect is one tap.)
+ * Discovers this device's wireless-debugging endpoints via mDNS — the "connect" service
+ * (`_adb-tls-connect._tcp`, always advertised while Wireless debugging is on) and the "pairing"
+ * service (`_adb-tls-pairing._tcp`, advertised only while the "Pair device with pairing code"
+ * dialog is open). Both ports change each session — this grabs the current one.
  */
 class AdbWifi(context: Context) {
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -18,14 +20,16 @@ class AdbWifi(context: Context) {
     private var listener: NsdManager.DiscoveryListener? = null
     private var onResult: ((String, Int) -> Unit)? = null
     private var onError: ((String) -> Unit)? = null
+    private var what = "service"
     private val timeout = Runnable {
-        fail("No wireless-debugging service found. Turn on Wireless debugging in Developer options, then retry.")
+        fail("No $what service found. Make sure Wireless debugging (and the pairing dialog, when pairing) is open on the phone, then retry.")
     }
 
-    fun discover(onResult: (host: String, port: Int) -> Unit, onError: (String) -> Unit) {
+    fun discover(serviceType: String, onResult: (host: String, port: Int) -> Unit, onError: (String) -> Unit) {
         stop()
         this.onResult = onResult
         this.onError = onError
+        this.what = if (serviceType == PAIRING) "pairing" else "wireless-debugging"
         main.postDelayed(timeout, 8_000)
         val l = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(t: String) {}
@@ -43,7 +47,7 @@ class AdbWifi(context: Context) {
         }
         listener = l
         try {
-            nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, l)
+            nsd.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, l)
         } catch (e: Exception) {
             fail("Couldn't start discovery: ${e.message}")
         }
@@ -52,9 +56,18 @@ class AdbWifi(context: Context) {
     private fun resolveListener() = object : NsdManager.ResolveListener {
         override fun onResolveFailed(si: NsdServiceInfo, e: Int) {} // keep waiting for another service
         override fun onServiceResolved(si: NsdServiceInfo) {
-            val host = si.host?.hostAddress ?: return fail("Couldn't resolve the device address.")
+            val host = ipv4(si) ?: return // adb wants the IPv4 LAN address; ignore IPv6-only results
             succeed(host, si.port)
         }
+    }
+
+    /** Prefer the IPv4 LAN address (adb connect/pair needs it, not a link-local IPv6). */
+    private fun ipv4(si: NsdServiceInfo): String? {
+        if (Build.VERSION.SDK_INT >= 34) {
+            si.hostAddresses.firstOrNull { it is Inet4Address }?.let { return it.hostAddress }
+        }
+        val h = si.host
+        return if (h is Inet4Address) h.hostAddress else null
     }
 
     private fun succeed(host: String, port: Int) {
@@ -82,6 +95,7 @@ class AdbWifi(context: Context) {
     }
 
     companion object {
-        const val SERVICE_TYPE = "_adb-tls-connect._tcp."
+        const val CONNECT = "_adb-tls-connect._tcp."
+        const val PAIRING = "_adb-tls-pairing._tcp."
     }
 }

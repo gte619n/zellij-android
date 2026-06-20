@@ -9,7 +9,7 @@ import { Supervisor } from "../session/supervisor";
 import type { MarkdownRenderer } from "../render/markdown";
 import type { ConnState } from "./connection";
 import { join } from "node:path";
-import { hostname } from "node:os";
+import { hostname, networkInterfaces } from "node:os";
 
 export const VERSION = "0.1.0";
 
@@ -28,6 +28,16 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'none'",
 ].join("; ");
+
+/** This host's non-internal IPv4 addresses (so the phone can be put on the same subnet). */
+function lanIPv4(): string[] {
+  const out: string[] = [];
+  for (const addrs of Object.values(networkInterfaces())) {
+    for (const a of addrs ?? []) if (a.family === "IPv4" && !a.internal) out.push(a.address);
+  }
+  return out;
+}
+const adbTarget = (host: string, port: number): string => (host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`);
 
 /** Run `adb` (from PATH or the common SDK locations); returns its combined output. */
 function runAdb(args: string[]): { ok: boolean; output: string } {
@@ -109,13 +119,25 @@ export function createServer(opts: ServerOptions): ServerHandle {
         return Response.json(body);
       }
 
-      // ADB wifi (Android client): connect the Mac to a phone's wireless-debugging endpoint
+      // ADB wifi (Android client): connect / pair the Mac with a phone's wireless-debugging endpoint
+      if (url.pathname === "/api/adb/info" && req.method === "GET") {
+        return Response.json({ serverIps: lanIPv4(), devices: runAdb(["devices", "-l"]).output });
+      }
       if (url.pathname === "/api/adb/connect" && req.method === "POST") {
         try {
           const { host, port } = (await req.json()) as { host?: string; port?: number };
           if (!host || !port) return new Response("host and port required", { status: 400 });
-          const target = host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`; // IPv6 needs brackets
-          return Response.json(runAdb(["connect", target]));
+          return Response.json(runAdb(["connect", adbTarget(host, port)]));
+        } catch {
+          return new Response("bad request", { status: 400 });
+        }
+      }
+      if (url.pathname === "/api/adb/pair" && req.method === "POST") {
+        try {
+          const { host, port, code } = (await req.json()) as { host?: string; port?: number; code?: string };
+          if (!host || !port || !code) return new Response("host, port, code required", { status: 400 });
+          const r = runAdb(["pair", adbTarget(host, port), String(code)]);
+          return Response.json({ ok: /success/i.test(r.output), output: r.output });
         } catch {
           return new Response("bad request", { status: 400 });
         }

@@ -179,42 +179,52 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleBridge(data: String, reply: JavaScriptReplyProxy) {
-        val type = runCatching { JSONObject(data).optString("type") }.getOrDefault("")
-        when (type) {
+        val json = runCatching { JSONObject(data) }.getOrNull()
+        when (json?.optString("type")) {
             "adb.connect" -> adbWifi.discover(
-                onResult = { host, port -> postAdbConnect(host, port, reply) },
-                onError = { msg -> replyBridge(reply, false, msg) },
+                AdbWifi.CONNECT,
+                onResult = { host, port -> postAdb("/api/adb/connect", JSONObject().put("host", host).put("port", port), reply, "connect", host, port) },
+                onError = { msg -> replyBridge(reply, false, msg, "connect") },
             )
-            else -> replyBridge(reply, false, "Unknown native command")
+            "adb.pair" -> {
+                val code = json.optString("code")
+                adbWifi.discover(
+                    AdbWifi.PAIRING,
+                    onResult = { host, port -> postAdb("/api/adb/pair", JSONObject().put("host", host).put("port", port).put("code", code), reply, "pair", host, port) },
+                    onError = { msg -> replyBridge(reply, false, msg, "pair") },
+                )
+            }
+            else -> replyBridge(reply, false, "Unknown native command", "")
         }
     }
 
-    private fun postAdbConnect(host: String, port: Int, reply: JavaScriptReplyProxy) {
+    private fun postAdb(path: String, body: JSONObject, reply: JavaScriptReplyProxy, stage: String, host: String, port: Int) {
         Thread {
             try {
                 val base = BuildConfig.ANVIL_BASE_URL.trimEnd('/')
-                val conn = (URL("$base/api/adb/connect").openConnection() as HttpURLConnection).apply {
+                val conn = (URL("$base$path").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     doOutput = true
                     connectTimeout = 8_000
-                    readTimeout = 12_000
+                    readTimeout = 20_000
                     setRequestProperty("Content-Type", "application/json")
                 }
-                conn.outputStream.use { it.write(JSONObject().put("host", host).put("port", port).toString().toByteArray()) }
+                conn.outputStream.use { it.write(body.toString().toByteArray()) }
                 val code = conn.responseCode
-                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
-                val parsed = runCatching { JSONObject(body) }.getOrNull()
-                val out = parsed?.optString("output", body) ?: body
+                val resp = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+                val parsed = runCatching { JSONObject(resp) }.getOrNull()
+                val out = parsed?.optString("output", resp) ?: resp
                 val ok = code in 200..299 && (parsed?.optBoolean("ok") ?: false)
-                replyBridge(reply, ok, if (ok) "Connected $host:$port → $out" else "ADB: $out")
+                val verb = if (stage == "pair") "Paired" else "Connected"
+                replyBridge(reply, ok, if (ok) "$verb $host:$port — $out" else "$host:$port → $out", stage)
             } catch (e: Exception) {
-                replyBridge(reply, false, "Couldn't reach the server: ${e.message}")
+                replyBridge(reply, false, "Couldn't reach the server: ${e.message}", stage)
             }
         }.start()
     }
 
-    private fun replyBridge(reply: JavaScriptReplyProxy, ok: Boolean, message: String) {
-        val json = JSONObject().put("type", "adb.result").put("ok", ok).put("message", message).toString()
+    private fun replyBridge(reply: JavaScriptReplyProxy, ok: Boolean, message: String, stage: String) {
+        val json = JSONObject().put("type", "adb.result").put("ok", ok).put("stage", stage).put("message", message).toString()
         runOnUiThread {
             runCatching { reply.postMessage(json) }
             Toast.makeText(this, message, Toast.LENGTH_LONG).show()

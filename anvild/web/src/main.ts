@@ -223,7 +223,10 @@ const nativeBridge: { postMessage(s: string): void; onmessage?: (e: MessageEvent
 if (nativeBridge) {
   nativeBridge.onmessage = (e) => {
     try {
-      toast((JSON.parse(e.data) as { message?: string }).message ?? "done");
+      const r = JSON.parse(e.data) as { ok?: boolean; message?: string };
+      const out = document.getElementById("adb-output");
+      if (out) out.textContent = `${r.ok ? "✓ " : "⚠ "}${r.message ?? ""}`;
+      else toast(r.message ?? "done");
     } catch {
       /* ignore */
     }
@@ -631,16 +634,45 @@ async function renderServerCards(): Promise<void> {
     host.innerHTML = `<p class="small muted">Couldn't reach the server.</p>`;
   }
   if (nativeBridge) {
+    const setOut = (t: string): void => {
+      const el = document.getElementById("adb-output");
+      if (el) el.textContent = t;
+    };
     host.insertAdjacentHTML(
       "beforeend",
-      `<div class="card"><div class="card-main">${icon("smartphone")} <b>This phone</b></div>
-      <div class="small muted">Connect the Mac to this phone over wifi for app installs/debugging. Turn on <b>Wireless debugging</b> in Developer options first (pair once manually; after that it's one tap).</div>
-      <div class="git-row" style="margin-top:10px"><button class="primary" id="adb-connect">${icon("wifi")} Connect via ADB (wifi)</button></div></div>`,
+      `<div class="card"><div class="card-main">${icon("smartphone")} <b>This phone (ADB over wifi)</b></div>
+      <div class="small muted" id="adb-info">Loading device info…</div>
+      <div class="git-row" style="margin-top:10px"><button class="primary" id="adb-connect">${icon("wifi")} Connect</button></div>
+      <hr />
+      <div class="small muted">First time on this Mac? On the phone open <b>Settings → Developer options → Wireless debugging → Pair device with pairing code</b>, then enter the 6-digit code here:</div>
+      <div class="git-row" style="margin-top:8px">
+        <input id="adb-pair-code" inputmode="numeric" maxlength="6" placeholder="6-digit code" style="max-width:140px" />
+        <button id="adb-pair">${icon("link")} Pair this Mac</button>
+      </div>
+      <pre class="git-output" id="adb-output"></pre></div>`,
     );
     $("#adb-connect").addEventListener("click", () => {
+      setOut("Discovering phone…");
       nativeBridge.postMessage(JSON.stringify({ type: "adb.connect" }));
-      toast("Discovering phone…");
     });
+    $("#adb-pair").addEventListener("click", () => {
+      const code = $<HTMLInputElement>("#adb-pair-code").value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        setOut("Enter the 6-digit pairing code shown on the phone.");
+        return;
+      }
+      setOut("Pairing… (keep the pairing dialog open on the phone)");
+      nativeBridge.postMessage(JSON.stringify({ type: "adb.pair", code }));
+    });
+    void fetch("/api/adb/info")
+      .then((r) => r.json())
+      .then((d: { serverIps?: string[]; devices?: string }) => {
+        const el = document.getElementById("adb-info");
+        if (!el) return;
+        const devs = (d.devices ?? "").split("\n").filter((l) => l.trim() && !/list of devices/i.test(l));
+        el.innerHTML = `Mac IP: <code>${esc((d.serverIps ?? []).join(", ") || "?")}</code> — the phone must be on the same network.<br/>adb devices: <code>${esc(devs.length ? devs.join("; ") : "none connected")}</code>`;
+      })
+      .catch(() => {});
   }
 }
 function renderEnvCards(): void {
