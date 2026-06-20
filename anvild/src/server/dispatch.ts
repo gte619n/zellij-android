@@ -184,6 +184,11 @@ export function dispatch(conn: ConnState, raw: string, send: Send, deps: Dispatc
         if (cid) send(ack(cid));
         return;
 
+      case "env.update":
+        deps.supervisor.updateEnvironment(cmd.id, { name: cmd.name, defaultBase: cmd.defaultBase });
+        if (cid) send(ack(cid));
+        return;
+
       case "env.remove":
         deps.supervisor.removeEnvironment(cmd.id);
         if (cid) send(ack(cid));

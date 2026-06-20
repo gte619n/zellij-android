@@ -98,6 +98,10 @@ export class Supervisor {
     }
     this.registry.toAll(this.environmentsEvent());
   }
+  updateEnvironment(id: string, fields: { name?: string; defaultBase?: string }): void {
+    this.envStore.update(id, fields);
+    this.registry.toAll(this.environmentsEvent());
+  }
   removeEnvironment(id: string): void {
     this.envStore.remove(id);
     this.registry.toAll(this.environmentsEvent());

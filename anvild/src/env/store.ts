@@ -42,6 +42,14 @@ export class EnvironmentStore {
     return env;
   }
 
+  update(id: string, fields: { name?: string; defaultBase?: string }): void {
+    const env = this.environments.find((e) => e.id === id);
+    if (!env) return;
+    if (fields.name !== undefined && fields.name.trim()) env.name = fields.name.trim();
+    if (fields.defaultBase !== undefined) env.defaultBase = fields.defaultBase.trim() || undefined;
+    this.save();
+  }
+
   remove(id: string): void {
     this.environments = this.environments.filter((e) => e.id !== id);
     this.save();

@@ -831,7 +831,7 @@ function showNewSession(): void {
   } else {
     const opts = envs.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("");
     m.innerHTML = `<div class="modal-box" id="ns-modal"><h3>New session</h3>
-      <label>Environment<div class="env-row"><select id="ns-env">${opts}</select><button type="button" id="ns-addenv" title="Add environment">＋</button></div></label>
+      <label>Environment<div class="env-row"><select id="ns-env">${opts}</select><button type="button" id="ns-editenv" title="Edit environment">✎</button><button type="button" id="ns-addenv" title="Add environment">＋</button></div></label>
       <label>Session name<input id="ns-name" placeholder="e.g. fix-login-bug" /></label>
       <p class="small muted" id="ns-note"></p>
       <p class="small warn-text" id="ns-warn"></p>
@@ -845,6 +845,10 @@ function showNewSession(): void {
 
   document.getElementById("ns-cancel")?.addEventListener("click", closeModal);
   document.getElementById("ns-addenv")?.addEventListener("click", () => showAddEnvironment());
+  document.getElementById("ns-editenv")?.addEventListener("click", () => {
+    const id = (document.getElementById("ns-env") as HTMLSelectElement | null)?.value;
+    if (id) showEditEnvironment(id);
+  });
   document.getElementById("ns-oneoff")?.addEventListener("click", (e) => {
     e.preventDefault();
     showOneOff();
@@ -862,12 +866,13 @@ function showNewSession(): void {
     const slug = slugify(name);
     const dup = !!env && slug.length > 0 && [...sessions.values()].some((s) => s.environmentId === env.id && slugify(s.title) === slug);
     if (note) {
+      const base = env?.defaultBase ?? "HEAD";
       note.textContent = !env
         ? ""
         : env.isRepo
           ? slug
-            ? `→ fresh worktree on branch “${slug}”`
-            : "Creates a fresh git worktree."
+            ? `→ fresh worktree on branch “${slug}” (off ${base})`
+            : `Creates a fresh git worktree (off ${base}).`
           : `Works directly in ${env.repoRoot} (no worktree).`;
     }
     if (warn) warn.textContent = dup ? `A session named “${name}” already exists in this environment.` : "";
@@ -905,6 +910,7 @@ function showAddEnvironment(): void {
   m.className = "modal";
   m.innerHTML = `<div class="modal-box"><h3>Add environment</h3>
     <label>Name<input id="ae-name" placeholder="e.g. OXOS Bots" /></label>
+    <label>Default branch (optional)<input id="ae-base" placeholder="e.g. main or dev — leave blank for HEAD" /></label>
     <p class="small muted">Pick a project repo (gets worktrees) or any folder:</p>
     ${browserMarkup()}
     <div class="btns"><button type="button" id="ae-back">Back</button><button type="button" id="ae-save">Add</button></div></div>`;
@@ -915,8 +921,36 @@ function showAddEnvironment(): void {
   $<HTMLButtonElement>("#ae-save").onclick = () => {
     if (!browse.path) return;
     const name = $<HTMLInputElement>("#ae-name").value.trim() || (browse.path.split("/").pop() ?? browse.path);
-    sock.send({ type: "env.add", name, repoRoot: browse.path });
+    const defaultBase = $<HTMLInputElement>("#ae-base").value.trim();
+    sock.send({ type: "env.add", name, repoRoot: browse.path, ...(defaultBase ? { defaultBase } : {}) });
     showNewSession(); // the environments broadcast will populate the new env
+  };
+}
+
+/** Edit an environment's name / default branch, or remove it. */
+function showEditEnvironment(id: string): void {
+  const env = environments.get(id);
+  if (!env) return;
+  const root = $("#modal-root");
+  const m = document.createElement("div");
+  m.className = "modal";
+  m.innerHTML = `<div class="modal-box"><h3>Edit environment</h3>
+    <label>Name<input id="ee-name" value="${esc(env.name)}" /></label>
+    <label>Default branch<input id="ee-base" value="${esc(env.defaultBase ?? "")}" placeholder="e.g. main or dev — blank for HEAD" /></label>
+    <p class="small muted">repo: <code>${esc(env.repoRoot)}</code>${env.isRepo ? "" : " (not a git repo)"}</p>
+    <div class="btns"><button type="button" class="danger" id="ee-remove">Remove</button><span class="spacer" style="flex:1"></span><button type="button" id="ee-back">Back</button><button type="button" id="ee-save">Save</button></div></div>`;
+  root.innerHTML = "";
+  root.appendChild(m);
+  $<HTMLButtonElement>("#ee-back").onclick = () => showNewSession();
+  $<HTMLButtonElement>("#ee-save").onclick = () => {
+    sock.send({ type: "env.update", id, name: $<HTMLInputElement>("#ee-name").value, defaultBase: $<HTMLInputElement>("#ee-base").value });
+    showNewSession();
+  };
+  $<HTMLButtonElement>("#ee-remove").onclick = () => {
+    if (confirm(`Remove the “${env.name}” environment? (existing sessions are unaffected)`)) {
+      sock.send({ type: "env.remove", id });
+      showNewSession();
+    }
   };
 }
 

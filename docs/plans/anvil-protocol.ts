@@ -532,6 +532,12 @@ export interface EnvAddCmd extends Envelope, Correlated {
   repoRoot: string; // must be a git repo
   defaultBase?: string;
 }
+export interface EnvUpdateCmd extends Envelope, Correlated {
+  type: "env.update";
+  id: string;
+  name?: string;
+  defaultBase?: string; // "" clears it (back to HEAD)
+}
 export interface EnvRemoveCmd extends Envelope, Correlated {
   type: "env.remove";
   id: string;
@@ -597,6 +603,7 @@ export type ClientCommand =
   | DirsListCmd
   | EnvListCmd
   | EnvAddCmd
+  | EnvUpdateCmd
   | EnvRemoveCmd
   // terminal
   | TerminalOpenCmd
