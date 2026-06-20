@@ -9,6 +9,7 @@ import { Supervisor } from "../session/supervisor";
 import type { MarkdownRenderer } from "../render/markdown";
 import type { ConnState } from "./connection";
 import { join } from "node:path";
+import { hostname } from "node:os";
 
 export const VERSION = "0.1.0";
 
@@ -86,9 +87,20 @@ export function createServer(opts: ServerOptions): ServerHandle {
           ok: true,
           subscriptionAuthOk: auth.subscriptionAuthOk,
           version: VERSION,
+          serverName: process.env.ANVIL_SERVER_NAME || hostname(),
           budget: supervisor.budget(),
         };
         return Response.json(body);
+      }
+
+      // environment README (arch §8): rendered markdown for the settings/management view
+      const readmeMatch = url.pathname.match(/^\/api\/environments\/([^/]+)\/readme$/);
+      if (readmeMatch && req.method === "GET") {
+        try {
+          return Response.json(supervisor.envReadme(readmeMatch[1]!) satisfies rest.EnvReadmeResponse);
+        } catch (e) {
+          return new Response(e instanceof Error ? e.message : "not found", { status: 404 });
+        }
       }
 
       // Web Push (arch §6.7): VAPID public key + browser subscription management

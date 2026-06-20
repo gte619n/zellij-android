@@ -641,6 +641,13 @@ export namespace rest {
     /** True only if CLAUDE_CODE_OAUTH_TOKEN is set AND ANTHROPIC_API_KEY is unset (§3). */
     subscriptionAuthOk: boolean;
     version: string;
+    serverName: string; // display name for this server (default: hostname) — fleet groundwork
     budget: Budget;
+  }
+  /** GET /api/environments/:id/readme — the repo's README, rendered (arch §8). */
+  export interface EnvReadmeResponse {
+    markdown?: RenderedMarkdown;
+    text?: string;
+    missing?: boolean;
   }
 }

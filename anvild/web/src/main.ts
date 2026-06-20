@@ -571,6 +571,100 @@ function onEnvironments(list: Environment[]): void {
   for (const e of list) environments.set(e.id, e);
   renderSessions();
   if (document.getElementById("ns-modal")) showNewSession(); // refresh an open new-session modal
+  if (document.getElementById("env-cards")) renderEnvCards(); // refresh an open settings view
+}
+
+// ── Settings & servers (first-class management area) ──────────────────────────────
+function openSettings(): void {
+  const root = $("#settings-root");
+  root.innerHTML = `<div class="settings-view">
+    <div class="settings-head">
+      <h2>${icon("tune")} Settings &amp; servers</h2>
+      <button id="settings-close" class="icon-btn" title="Close">${icon("close")}</button>
+    </div>
+    <div class="settings-body">
+      <section class="settings-section">
+        <h3>Servers</h3>
+        <div id="server-cards"><p class="small muted">Loading…</p></div>
+      </section>
+      <section class="settings-section">
+        <div class="section-head"><h3>Environments</h3><button id="set-add-env" class="primary">${icon("add")} Add repo</button></div>
+        <p class="small muted">Environments are git repositories. A new session branches a fresh worktree off one.</p>
+        <div id="env-cards"></div>
+      </section>
+    </div>
+  </div>`;
+  $("#settings-close").addEventListener("click", closeSettings);
+  $("#set-add-env").addEventListener("click", () => showAddEnvironment());
+  renderServerCards();
+  renderEnvCards();
+}
+function closeSettings(): void {
+  $("#settings-root").innerHTML = "";
+}
+async function renderServerCards(): Promise<void> {
+  const host = $("#server-cards");
+  try {
+    const h = (await (await fetch("/api/health")).json()) as { serverName?: string; version?: string; budget?: Budget };
+    const b = h.budget;
+    const budgetLine = b ? `Opus ${b.opus.usedHrs.toFixed(1)}/${b.opus.limitHrs}h · Sonnet ${b.sonnet.usedHrs.toFixed(1)}/${b.sonnet.limitHrs}h` : "";
+    host.innerHTML = `<div class="card server-card">
+      <div class="card-main"><span class="conn-dot connected"></span><b>${esc(h.serverName ?? location.host)}</b> <span class="small muted">(this server)</span></div>
+      <div class="small muted"><code>${esc(location.host)}</code> · anvild ${esc(h.version ?? "?")}</div>
+      <div class="small muted">${esc(budgetLine)}</div>
+    </div>
+    <p class="small muted">Multi-server (managing anvild on your other Macs from here) is on the roadmap — see the fleet design.</p>`;
+  } catch {
+    host.innerHTML = `<p class="small muted">Couldn't reach the server.</p>`;
+  }
+}
+function renderEnvCards(): void {
+  const host = document.getElementById("env-cards");
+  if (!host) return;
+  const envs = [...environments.values()];
+  if (envs.length === 0) {
+    host.innerHTML = `<p class="small muted">No environments yet. Add a git repo to get started.</p>`;
+    return;
+  }
+  host.innerHTML = envs
+    .map(
+      (e) => `<div class="card env-card" data-env="${esc(e.id)}">
+      <div class="env-head">
+        <div class="env-meta">
+          <b>${esc(e.name)}</b>
+          <div class="small muted"><code>${esc(e.repoRoot)}</code></div>
+          <div class="small muted">${icon("account_tree")} off <code>${esc(e.defaultBase ?? "HEAD")}</code></div>
+        </div>
+        <div class="env-actions">
+          <button class="mini env-readme" data-env="${esc(e.id)}">${icon("description")} README</button>
+          <button class="mini env-edit" data-env="${esc(e.id)}">${icon("edit")} Edit</button>
+        </div>
+      </div>
+      <div class="env-readme-body" id="readme-${esc(e.id)}" hidden></div>
+    </div>`,
+    )
+    .join("");
+  host.querySelectorAll<HTMLElement>(".env-edit").forEach((b) => b.addEventListener("click", () => showEditEnvironment(b.dataset.env!)));
+  host.querySelectorAll<HTMLElement>(".env-readme").forEach((b) => b.addEventListener("click", () => toggleReadme(b.dataset.env!)));
+}
+const readmeLoaded = new Set<string>();
+async function toggleReadme(id: string): Promise<void> {
+  const body = document.getElementById(`readme-${id}`);
+  if (!body) return;
+  body.hidden = !body.hidden;
+  if (body.hidden || readmeLoaded.has(id)) return;
+  body.innerHTML = `<p class="small muted">Loading README…</p>`;
+  try {
+    const r = (await (await fetch(`/api/environments/${encodeURIComponent(id)}/readme`)).json()) as { markdown?: { html: string }; text?: string; missing?: boolean };
+    if (r.missing) body.innerHTML = `<p class="small muted">No README found in this repo.</p>`;
+    else if (r.markdown) {
+      body.innerHTML = `<div class="md reader-md">${r.markdown.html}</div>`;
+      void runMermaid(body.querySelector(".reader-md") as HTMLElement);
+    } else body.innerHTML = `<pre class="reader-text">${esc(r.text ?? "")}</pre>`;
+    readmeLoaded.add(id);
+  } catch {
+    body.innerHTML = `<p class="small muted">Couldn't load the README.</p>`;
+  }
 }
 function renderBudget(b: Budget): void {
   const el = $("#budget");
@@ -1085,6 +1179,7 @@ let onDirs: ((e: DirsListResultEvent) => void) | null = null;
 const browse = { path: "", parent: undefined as string | undefined };
 
 $("#new-session").addEventListener("click", showNewSession);
+$("#open-settings").addEventListener("click", openSettings);
 
 const closeModal = (): void => {
   onDirs = null;
@@ -1131,29 +1226,29 @@ function showNewSession(): void {
   m.className = "modal";
   if (envs.length === 0) {
     m.innerHTML = `<div class="modal-box" id="ns-modal"><h3>New session</h3>
-      <p class="muted">No environments yet — register a project repo to get started.</p>
-      <div class="btns"><button type="button" id="ns-cancel">Cancel</button><button type="button" id="ns-addenv">＋ Add environment</button></div>
+      <p class="muted">No environments yet — add a project repo in Settings to get started.</p>
+      <div class="btns"><button type="button" id="ns-cancel">Cancel</button><button type="button" id="ns-manage" class="primary">Settings &amp; servers</button></div>
       <p class="small muted"><a id="ns-oneoff" href="#">or work in a one-off folder…</a></p></div>`;
   } else {
     const opts = envs.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("");
     m.innerHTML = `<div class="modal-box" id="ns-modal"><h3>New session</h3>
-      <label>Environment<div class="env-row"><select id="ns-env">${opts}</select><button type="button" id="ns-editenv" title="Edit environment">✎</button><button type="button" id="ns-addenv" title="Add environment">＋</button></div></label>
+      <label>Environment<div class="env-row"><select id="ns-env">${opts}</select></div></label>
       <label>Session name<input id="ns-name" placeholder="e.g. fix-login-bug" /></label>
       <p class="small muted" id="ns-note"></p>
       <p class="small warn-text" id="ns-warn"></p>
       ${MODEL_AUTONOMY}
       <div class="btns"><button type="button" id="ns-cancel">Cancel</button><button type="button" id="ns-create">Create</button></div>
-      <p class="small muted"><a id="ns-oneoff" href="#">or work in a one-off folder…</a></p></div>`;
+      <p class="small muted"><a id="ns-manage" href="#">⚙ Manage environments…</a> · <a id="ns-oneoff" href="#">one-off folder…</a></p></div>`;
   }
   root.innerHTML = "";
   root.appendChild(m);
   onDirs = null; // this modal has no browser
 
   document.getElementById("ns-cancel")?.addEventListener("click", closeModal);
-  document.getElementById("ns-addenv")?.addEventListener("click", () => showAddEnvironment());
-  document.getElementById("ns-editenv")?.addEventListener("click", () => {
-    const id = (document.getElementById("ns-env") as HTMLSelectElement | null)?.value;
-    if (id) showEditEnvironment(id);
+  document.getElementById("ns-manage")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeModal();
+    openSettings();
   });
   document.getElementById("ns-oneoff")?.addEventListener("click", (e) => {
     e.preventDefault();
@@ -1217,19 +1312,19 @@ function showAddEnvironment(): void {
   m.innerHTML = `<div class="modal-box"><h3>Add environment</h3>
     <label>Name<input id="ae-name" placeholder="e.g. OXOS Bots" /></label>
     <label>Default branch (optional)<input id="ae-base" placeholder="e.g. main or dev — leave blank for HEAD" /></label>
-    <p class="small muted">Pick a project repo (gets worktrees) or any folder:</p>
+    <p class="small muted">Pick a project <b>git repository</b> (environments must be git repos):</p>
     ${browserMarkup()}
-    <div class="btns"><button type="button" id="ae-back">Back</button><button type="button" id="ae-save">Add</button></div></div>`;
+    <div class="btns"><button type="button" id="ae-back">Cancel</button><button type="button" id="ae-save" class="primary">Add</button></div></div>`;
   root.innerHTML = "";
   root.appendChild(m);
   wireBrowser();
-  $<HTMLButtonElement>("#ae-back").onclick = () => showNewSession();
+  $<HTMLButtonElement>("#ae-back").onclick = closeModal; // returns to Settings underneath
   $<HTMLButtonElement>("#ae-save").onclick = () => {
     if (!browse.path) return;
     const name = $<HTMLInputElement>("#ae-name").value.trim() || (browse.path.split("/").pop() ?? browse.path);
     const defaultBase = $<HTMLInputElement>("#ae-base").value.trim();
     sock.send({ type: "env.add", name, repoRoot: browse.path, ...(defaultBase ? { defaultBase } : {}) });
-    showNewSession(); // the environments broadcast will populate the new env
+    closeModal(); // the environments broadcast refreshes Settings / the new-session list
   };
 }
 
@@ -1247,10 +1342,10 @@ function showEditEnvironment(id: string): void {
     <div class="btns"><button type="button" class="danger" id="ee-remove">Remove</button><span class="spacer" style="flex:1"></span><button type="button" id="ee-back">Back</button><button type="button" id="ee-save">Save</button></div></div>`;
   root.innerHTML = "";
   root.appendChild(m);
-  $<HTMLButtonElement>("#ee-back").onclick = () => showNewSession();
+  $<HTMLButtonElement>("#ee-back").onclick = closeModal;
   $<HTMLButtonElement>("#ee-save").onclick = () => {
     sock.send({ type: "env.update", id, name: $<HTMLInputElement>("#ee-name").value, defaultBase: $<HTMLInputElement>("#ee-base").value });
-    showNewSession();
+    closeModal();
   };
   $<HTMLButtonElement>("#ee-remove").onclick = async () => {
     const ok = await confirmDialog({
@@ -1262,7 +1357,7 @@ function showEditEnvironment(id: string): void {
     });
     if (ok) {
       sock.send({ type: "env.remove", id });
-      showNewSession();
+      closeModal();
     }
   };
 }

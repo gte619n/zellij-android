@@ -1,5 +1,6 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdirSync as ensureDir, unwatchFile, watchFile } from "node:fs";
+import { join } from "node:path";
 import {
   PROTOCOL_VERSION,
   type AttachmentRef,
@@ -101,6 +102,20 @@ export class Supervisor {
       throw new BadCommand(e instanceof Error ? e.message : String(e));
     }
     this.registry.toAll(this.environmentsEvent());
+  }
+  /** Read & render an environment repo's README (arch §8). */
+  envReadme(id: string): { markdown?: ReturnType<MarkdownRenderer["render"]>; text?: string; missing?: boolean } {
+    const env = this.envStore.get(id);
+    if (!env) throw new BadCommand(`no such environment: ${id}`);
+    for (const name of ["README.md", "README.markdown", "Readme.md", "readme.md", "README", "README.txt"]) {
+      const p = join(env.repoRoot, name);
+      if (existsSync(p)) {
+        const raw = readFileSync(p, "utf8").slice(0, 256 * 1024);
+        const isMd = /\.(md|markdown)$/i.test(name) || name === "README";
+        return isMd ? { markdown: this.renderer.render(raw) } : { text: raw };
+      }
+    }
+    return { missing: true };
   }
   updateEnvironment(id: string, fields: { name?: string; defaultBase?: string }): void {
     this.envStore.update(id, fields);
