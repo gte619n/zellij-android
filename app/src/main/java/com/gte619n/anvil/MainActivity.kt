@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.PermissionRequest
+import android.widget.FrameLayout
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -19,6 +20,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -38,6 +40,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var web: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val adbWifi by lazy { AdbWifi(this) }
+    private var webReady = false
 
     private val notifPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* result ignored */ }
@@ -51,8 +54,10 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        val splash = installSplashScreen() // brand icon until the web app is ready (no white flash)
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        splash.setKeepOnScreenCondition { !webReady }
 
         web = WebView(this).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -67,13 +72,19 @@ class MainActivity : ComponentActivity() {
                 mediaPlaybackRequiresUserGesture = false
                 allowFileAccess = false
                 allowContentAccess = false
+                cacheMode = android.webkit.WebSettings.LOAD_DEFAULT // HTTP cache + service worker
             }
+            setBackgroundColor(0xFF2F2739.toInt())
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val host = request.url.host ?: return false
                     if (host == BASE_HOST) return false // keep our origin in the app
                     startActivity(Intent(Intent.ACTION_VIEW, request.url)) // external links → browser
                     return true
+                }
+
+                override fun onPageFinished(view: WebView, url: String) {
+                    webReady = true // dismiss the splash once the shell is loaded
                 }
             }
             webChromeClient = object : WebChromeClient() {
@@ -96,11 +107,20 @@ class MainActivity : ComponentActivity() {
                 override fun onPermissionRequest(request: PermissionRequest) = request.deny()
             }
         }
-        setContentView(web)
-        // The status/nav-bar strips show the WebView background (brand color) with light icons,
-        // so app content never sits under the notification bar.
-        web.setBackgroundColor(0xFF2F2739.toInt())
-        WindowInsetsControllerCompat(window, web).isAppearanceLightStatusBars = false
+        // Root container painted the brand color; padding it by the system bars physically insets
+        // the WebView child, so app content never sits under the status/nav bars. The strips show
+        // the brand color, with light status-bar icons.
+        val root = FrameLayout(this).apply { setBackgroundColor(0xFF2F2739.toInt()) }
+        root.addView(web)
+        setContentView(root)
+        WindowInsetsControllerCompat(window, root).isAppearanceLightStatusBars = false
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime() or WindowInsetsCompat.Type.displayCutout())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(root)
+        root.postDelayed({ webReady = true }, 5_000) // safety: never hang on the splash
 
         // Native bridge: the web app (Settings) posts {type:"adb.connect"} → we discover the
         // wireless-debugging endpoint and tell the daemon to `adb connect`, then reply.
@@ -114,15 +134,6 @@ class MainActivity : ComponentActivity() {
                 handleBridge(message.data ?: "", replyProxy)
             }
         }
-
-        // targetSdk 35 forces edge-to-edge; pad the WebView by the system bars + keyboard so the
-        // composer rides above the keyboard and content clears the status/nav bars.
-        ViewCompat.setOnApplyWindowInsetsListener(web) { v, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime() or WindowInsetsCompat.Type.displayCutout())
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            insets
-        }
-        ViewCompat.requestApplyInsets(web)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
