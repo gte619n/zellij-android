@@ -1,4 +1,4 @@
-package com.zellijconnect.app
+package com.gte619n.anvil
 
 import android.annotation.SuppressLint
 import android.content.Intent
