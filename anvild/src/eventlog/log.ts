@@ -14,7 +14,12 @@ import { now } from "../util/envelope";
  *   - assistant.delta — transient streaming chunks, superseded by assistant.message
  *   - terminal.*      — high-volume PTY bytes; terminal resume is scrollback replay, not snapshot
  */
-const SKIP_PERSIST: ReadonlySet<string> = new Set(["assistant.delta", "terminal.data", "terminal.exit"]);
+const SKIP_PERSIST: ReadonlySet<string> = new Set([
+  "assistant.delta",
+  "terminal.data",
+  "terminal.exit",
+  "fs.changed", // live re-render of a watched file; re-derivable, not conversation history
+]);
 
 /**
  * Append-only per-session event log (`events.ndjson`) — the source of truth for resume

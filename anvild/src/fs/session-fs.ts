@@ -1,0 +1,82 @@
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
+import type { DirEntry, FileContent } from "@protocol";
+import type { MarkdownRenderer } from "../render/markdown";
+
+/**
+ * Confine `userPath` to the session worktree `root` (arch §8.1). Resolves symlinks so a
+ * link can't escape. This is the only boundary for fs.* (the daemon runs as the dev user).
+ */
+export function resolveInside(root: string, userPath: string): string {
+  const abs = resolve(root, userPath || ".");
+  const real = existsSync(abs) ? realpathSync(abs) : abs;
+  const rootReal = realpathSync(root);
+  if (real !== rootReal && !real.startsWith(rootReal + sep)) {
+    throw new Error("path escapes the session tree");
+  }
+  return real;
+}
+
+const MIME: Record<string, string> = {
+  md: "text/markdown", markdown: "text/markdown",
+  ts: "text/typescript", tsx: "text/typescript", js: "text/javascript", jsx: "text/javascript", mjs: "text/javascript",
+  json: "application/json", jsonc: "application/json", html: "text/html", css: "text/css",
+  py: "text/x-python", rs: "text/x-rust", go: "text/x-go", java: "text/x-java", c: "text/x-c", h: "text/x-c",
+  cpp: "text/x-c++", kt: "text/x-kotlin", swift: "text/x-swift", rb: "text/x-ruby", php: "text/x-php",
+  sh: "text/x-sh", bash: "text/x-sh", zsh: "text/x-sh", yaml: "text/yaml", yml: "text/yaml", toml: "text/toml",
+  sql: "text/x-sql", txt: "text/plain", log: "text/plain", env: "text/plain", gitignore: "text/plain",
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+  svg: "image/svg+xml", ico: "image/x-icon", pdf: "application/pdf",
+};
+const extOf = (p: string): string => (p.includes(".") ? p.split(".").pop()!.toLowerCase() : "");
+const mimeFor = (p: string): string => MIME[extOf(p)] ?? "application/octet-stream";
+const isBinary = (mime: string): boolean => mime.startsWith("image/") || mime === "application/pdf" || mime === "application/octet-stream";
+
+const TEXT_CAP = 256 * 1024;
+const SKIP = new Set([".git", "node_modules", ".DS_Store"]);
+
+/** List a directory within the worktree (folders first). Paths are worktree-relative. */
+export function listDir(root: string, userPath: string): { path: string; entries: DirEntry[] } {
+  const dir = resolveInside(root, userPath);
+  const entries: DirEntry[] = [];
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    if (SKIP.has(d.name)) continue;
+    const rel = join(userPath, d.name).replace(/^\/+/, "");
+    let size: number | undefined;
+    if (!d.isDirectory()) {
+      try {
+        size = statSync(join(dir, d.name)).size;
+      } catch {
+        /* ignore */
+      }
+    }
+    entries.push({ name: d.name, path: rel, isDir: d.isDirectory(), size });
+  }
+  entries.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
+  return { path: userPath, entries };
+}
+
+/** Read a file as FileContent: markdown rendered, text inline (capped), binaries as a URL. */
+export function readFile(
+  root: string,
+  userPath: string,
+  renderer: MarkdownRenderer,
+  binaryUrlFor: (relPath: string) => string,
+): FileContent {
+  const file = resolveInside(root, userPath);
+  const st = statSync(file);
+  const rev = `${st.mtimeMs}:${st.size}`;
+  const mime = mimeFor(userPath);
+
+  if (mime === "text/markdown") {
+    return { path: userPath, rev, mime, markdown: renderer.render(readFileSync(file, "utf8")) };
+  }
+  if (isBinary(mime)) {
+    return { path: userPath, rev, mime, binaryUrl: binaryUrlFor(userPath) };
+  }
+  const raw = readFileSync(file, "utf8");
+  if (raw.length > TEXT_CAP) {
+    return { path: userPath, rev, mime, text: raw.slice(0, TEXT_CAP), truncated: true };
+  }
+  return { path: userPath, rev, mime, text: raw };
+}

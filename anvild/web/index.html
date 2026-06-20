@@ -19,15 +19,36 @@
         <ul id="session-list"></ul>
       </aside>
       <main id="main">
-        <header id="header"><span id="header-title">Anvil</span><span id="status"></span></header>
-        <div id="conversation"></div>
-        <form id="composer">
-          <div id="attach-row"></div>
-          <div class="composer-row">
-            <textarea id="input" rows="3" placeholder="Message Claude…  (Enter to send · Shift+Enter for newline · paste an image)"></textarea>
-            <button type="submit" id="send">Send</button>
+        <header id="header">
+          <span id="header-title">Anvil</span>
+          <span id="header-actions">
+            <button class="hbtn" id="btn-files" title="Files">📁</button>
+            <button class="hbtn" id="btn-terminal" title="Terminal">⌨</button>
+            <span id="status"></span>
+          </span>
+        </header>
+        <div id="main-body">
+          <div id="convo-col">
+            <div id="conversation"></div>
+            <form id="composer">
+              <div id="attach-row"></div>
+              <div class="composer-row">
+                <textarea id="input" rows="3" placeholder="Message Claude…  (Enter to send · Shift+Enter for newline · paste an image)"></textarea>
+                <button type="submit" id="send">Send</button>
+              </div>
+            </form>
           </div>
-        </form>
+          <aside id="side-panel">
+            <div id="panel-tabs">
+              <button class="ptab" data-view="files">Files</button>
+              <button class="ptab" data-view="reader">Reader</button>
+              <button class="ptab" data-view="terminal">Terminal</button>
+              <span class="ptab-spacer"></span>
+              <button id="panel-close" title="Close">✕</button>
+            </div>
+            <div id="panel-content"></div>
+          </aside>
+        </div>
       </main>
     </div>
     <div id="modal-root"></div>

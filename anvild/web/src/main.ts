@@ -5,8 +5,10 @@ import type {
   Budget,
   ContentBlock,
   ConversationEvent,
+  DirEntry,
   DirsListResultEvent,
   Environment,
+  FileContent,
   PermissionSuggestion,
   ServerEvent,
   Session,
@@ -97,6 +99,12 @@ function onEvent(e: ServerEvent): void {
     case "dirs.list.result":
       onDirs?.(e);
       return;
+    case "fs.list.result":
+      if (panel.classList.contains("open") && e.sessionId === activeId) renderFiles(e.entries);
+      return;
+    case "fs.read.result":
+      renderReader(e.content);
+      return;
     case "command.error":
       toast(e.message);
       return;
@@ -135,6 +143,9 @@ function handleSessionEvent(e: ServerEvent): void {
       return;
     case "permission.request":
       showPermission(e.requestId, e.tool, e.input, e.suggestions);
+      return;
+    case "fs.changed":
+      if (panel.classList.contains("open") && e.content.path === readerPath) renderReader(e.content);
       return;
     case "error":
       toast(e.message);
@@ -288,6 +299,11 @@ function selectSession(id: string): void {
   const s = sessions.get(id);
   $("#header-title").textContent = s?.title ?? "Anvil";
   sock.send({ type: "session.attach", sessionId: id, lastSeq: seqStore.get(id) });
+  // reset the side panel for the new session's worktree
+  filesPath = "";
+  readerPath = "";
+  readerWatch = "";
+  if (panelView) openPanel("files");
 }
 
 // ── Composer ───────────────────────────────────────────────────────────────────
@@ -379,30 +395,129 @@ quoteBtn.id = "quote-btn";
 quoteBtn.textContent = "❝ Quote";
 quoteBtn.style.display = "none";
 document.body.appendChild(quoteBtn);
-document.addEventListener("selectionchange", () => {
+function selectionEl(): Element | null {
   const sel = window.getSelection();
-  const text = sel?.toString().trim() ?? "";
-  const node = sel && sel.rangeCount > 0 ? sel.anchorNode : null;
+  if (!sel || sel.rangeCount === 0 || !sel.toString().trim()) return null;
+  const node = sel.anchorNode;
   const el = node ? (node.nodeType === 1 ? (node as Element) : node.parentElement) : null;
-  if (!text || !el?.closest("#conversation")) {
+  return el?.closest("#conversation, #panel-content") ?? null;
+}
+document.addEventListener("selectionchange", () => {
+  const el = selectionEl();
+  if (!el) {
     quoteBtn.style.display = "none";
     return;
   }
-  const rect = sel!.getRangeAt(0).getBoundingClientRect();
+  const rect = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
   quoteBtn.style.display = "block";
   quoteBtn.style.top = `${window.scrollY + rect.top - 36}px`;
   quoteBtn.style.left = `${window.scrollX + rect.left}px`;
 });
 quoteBtn.addEventListener("mousedown", (e) => {
   e.preventDefault(); // keep the selection alive through the click
+  const el = selectionEl();
   const text = window.getSelection()?.toString().trim() ?? "";
-  if (!text) return;
-  const quoted = text.split("\n").map((l) => `> ${l}`).join("\n");
+  if (!el || !text) return;
+  const fromReader = el.closest("#panel-content") && readerPath;
+  const prefix = fromReader ? `> from \`${readerPath}\`:\n` : "";
+  const quoted = prefix + text.split("\n").map((l) => `> ${l}`).join("\n");
   input.value = input.value ? `${quoted}\n\n${input.value}` : `${quoted}\n\n`;
   input.focus();
   quoteBtn.style.display = "none";
   window.getSelection()?.removeAllRanges();
 });
+
+// ── Side panel: files + reader (terminal lands next) ──────────────────────────────
+const panel = $("#side-panel");
+const panelContent = $("#panel-content");
+let panelView: "files" | "reader" | "terminal" | null = null;
+let filesPath = "";
+let readerPath = "";
+let readerWatch = "";
+
+function setPanelTabs(): void {
+  document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.classList.toggle("active", t.dataset.view === panelView));
+  $("#btn-files").classList.toggle("active", panelView === "files" || panelView === "reader");
+  $("#btn-terminal").classList.toggle("active", panelView === "terminal");
+}
+function openPanel(view: "files" | "reader" | "terminal"): void {
+  if (!activeId) {
+    toast("Open a session first");
+    return;
+  }
+  panelView = view;
+  panel.classList.add("open");
+  setPanelTabs();
+  if (view === "files") requestFiles(filesPath);
+  else if (view === "reader" && !readerPath) requestFiles(filesPath);
+  else if (view === "terminal") panelContent.innerHTML = '<p class="muted small">Terminal lands in the next update.</p>';
+}
+function closePanel(): void {
+  if (readerWatch && activeId) sock.send({ type: "fs.unwatch", sessionId: activeId, path: readerWatch });
+  readerWatch = "";
+  panelView = null;
+  panel.classList.remove("open");
+  setPanelTabs();
+}
+function requestFiles(path: string): void {
+  if (!activeId) return;
+  filesPath = path;
+  sock.send({ type: "fs.list", sessionId: activeId, path });
+}
+function renderFiles(entries: DirEntry[]): void {
+  panelView = "files";
+  setPanelTabs();
+  const ul = document.createElement("ul");
+  ul.className = "file-list";
+  if (filesPath) {
+    const up = document.createElement("li");
+    up.className = "dir";
+    up.innerHTML = "📁 ..";
+    up.onclick = () => requestFiles(filesPath.split("/").slice(0, -1).join("/"));
+    ul.appendChild(up);
+  }
+  for (const e of entries) {
+    const li = document.createElement("li");
+    li.className = e.isDir ? "dir" : "";
+    li.innerHTML = `${e.isDir ? "📁" : "📄"} ${esc(e.name)}`;
+    li.onclick = () => (e.isDir ? requestFiles(e.path) : openFile(e.path));
+    ul.appendChild(li);
+  }
+  panelContent.innerHTML = "";
+  panelContent.appendChild(ul);
+}
+function openFile(path: string): void {
+  if (!activeId) return;
+  readerPath = path;
+  panelView = "reader";
+  setPanelTabs();
+  if (readerWatch && readerWatch !== path) sock.send({ type: "fs.unwatch", sessionId: activeId, path: readerWatch });
+  sock.send({ type: "fs.read", sessionId: activeId, path });
+  sock.send({ type: "fs.watch", sessionId: activeId, path });
+  readerWatch = path;
+  panelContent.innerHTML = `<p class="muted small">Loading ${esc(path)}…</p>`;
+}
+function renderReader(content: FileContent): void {
+  if (content.path !== readerPath) return;
+  panelView = "reader";
+  setPanelTabs();
+  const head = `<div class="reader-head"><b>${esc(content.path)}</b><a href="#" id="reader-back">← files</a></div>`;
+  if (content.markdown) {
+    panelContent.innerHTML = head + `<div class="md reader-md">${content.markdown.html}</div>`;
+    void runMermaid(panelContent.querySelector(".reader-md") as HTMLElement);
+  } else if (content.text !== undefined) {
+    panelContent.innerHTML = head + `<pre class="reader-text">${esc(content.text)}</pre>` + (content.truncated ? '<p class="muted small">(truncated)</p>' : "");
+  } else if (content.binaryUrl) {
+    panelContent.innerHTML =
+      head + (content.mime.startsWith("image/") ? `<img src="${content.binaryUrl}" style="max-width:100%" />` : `<a href="${content.binaryUrl}" target="_blank">Open ${esc(content.path)}</a>`);
+  }
+  const back = document.getElementById("reader-back");
+  if (back) back.onclick = (e) => { e.preventDefault(); openPanel("files"); };
+}
+$("#btn-files").addEventListener("click", () => (panelView === "files" || panelView === "reader" ? closePanel() : openPanel("files")));
+$("#btn-terminal").addEventListener("click", () => (panelView === "terminal" ? closePanel() : openPanel("terminal")));
+$("#panel-close").addEventListener("click", closePanel);
+document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.addEventListener("click", () => openPanel(t.dataset.view as "files" | "reader" | "terminal")));
 
 // ── Modals ─────────────────────────────────────────────────────────────────────
 let onDirs: ((e: DirsListResultEvent) => void) | null = null;

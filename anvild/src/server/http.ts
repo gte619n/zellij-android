@@ -97,6 +97,21 @@ export function createServer(opts: ServerOptions): ServerHandle {
         return new Response("expected a websocket upgrade", { status: 426 });
       }
 
+      // worktree files (arch §8.1): serve a binary/image file from the session worktree
+      const fileMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/files$/);
+      if (fileMatch && req.method === "GET") {
+        const sessionId = fileMatch[1]!;
+        const path = url.searchParams.get("path") ?? "";
+        try {
+          const abs = supervisor.fsResolve(sessionId, path);
+          const file = Bun.file(abs);
+          if (!(await file.exists())) return new Response("not found", { status: 404 });
+          return new Response(file);
+        } catch {
+          return new Response("forbidden", { status: 403 });
+        }
+      }
+
       // attachments (arch §6.5): POST uploads a pasted/dropped file, GET serves it back
       const attMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/attachments(?:\/([^/]+))?$/);
       if (attMatch) {

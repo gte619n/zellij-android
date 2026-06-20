@@ -1,8 +1,10 @@
 import { mkdirSync, rmSync } from "node:fs";
-import { mkdirSync as ensureDir } from "node:fs";
+import { mkdirSync as ensureDir, unwatchFile, watchFile } from "node:fs";
 import {
   PROTOCOL_VERSION,
   type AttachmentRef,
+  type DirEntry,
+  type FileContent,
   type AutonomyPolicy,
   type Budget,
   type BudgetEvent,
@@ -29,6 +31,7 @@ import { EventLog } from "../eventlog/log";
 import { BudgetTracker } from "../budget/tracker";
 import { EnvironmentStore } from "../env/store";
 import { AttachmentStore } from "../attach/store";
+import { listDir, readFile, resolveInside } from "../fs/session-fs";
 
 /** A client command that can't be honored (bad args, no such session). → command.error. */
 export class BadCommand extends Error {}
@@ -161,6 +164,54 @@ export class Supervisor {
     return session; // dispatch announces session.created (creator gets the cid; others via registry)
   }
 
+  // File browser & reader (arch §8.1/§8.2), scoped to the session worktree.
+  private readonly watchers = new Map<string, () => void>(); // `${sessionId}:${path}` → stop fn
+
+  fsList(sessionId: string, path: string): { path: string; entries: DirEntry[] } {
+    return listDir(this.require(sessionId).data.cwd, path);
+  }
+  fsRead(sessionId: string, path: string): FileContent {
+    return readFile(this.require(sessionId).data.cwd, path, this.renderer, (p) => this.fileUrl(sessionId, p));
+  }
+  fsResolve(sessionId: string, path: string): string {
+    return resolveInside(this.require(sessionId).data.cwd, path);
+  }
+  fsWatch(sessionId: string, path: string): void {
+    const key = `${sessionId}:${path}`;
+    if (this.watchers.has(key)) return;
+    const s = this.require(sessionId);
+    const abs = resolveInside(s.data.cwd, path);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onChange = (): void => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        try {
+          s.emit({ type: "fs.changed", content: readFile(s.data.cwd, path, this.renderer, (p) => this.fileUrl(sessionId, p)) });
+        } catch {
+          /* file deleted / unreadable — ignore */
+        }
+      }, 250);
+    };
+    watchFile(abs, { interval: 1000 }, onChange);
+    this.watchers.set(key, () => unwatchFile(abs, onChange));
+  }
+  fsUnwatch(sessionId: string, path: string): void {
+    const key = `${sessionId}:${path}`;
+    this.watchers.get(key)?.();
+    this.watchers.delete(key);
+  }
+  private clearWatchers(sessionId: string): void {
+    for (const [key, stop] of this.watchers) {
+      if (key.startsWith(`${sessionId}:`)) {
+        stop();
+        this.watchers.delete(key);
+      }
+    }
+  }
+  private fileUrl(sessionId: string, relPath: string): string {
+    return `/api/sessions/${sessionId}/files?path=${encodeURIComponent(relPath)}`;
+  }
+
   // Attachments (arch §6.5) — uploaded via REST, fed to the agent as image blocks.
   addAttachment(sessionId: string, name: string, mediaType: string, dataBase64: string): AttachmentRef {
     this.require(sessionId);
@@ -226,6 +277,7 @@ export class Supervisor {
     const s = this.require(id);
     await this.drivers.get(id)?.stop(); // interrupt the agent SDK query + close its input
     this.drivers.delete(id);
+    this.clearWatchers(id);
     await s.stop(); // reap any attached process group (PTY in Phase 3)
     if (s.data.source === "fresh-worktree" && s.data.worktree) {
       removeWorktree(s.data.worktree.repoRoot, s.data.cwd, s.data.worktree.branch);

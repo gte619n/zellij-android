@@ -26,10 +26,6 @@ function errMsg(e: unknown): string {
 
 /** Command types in the contract but not built until later milestones. */
 const PENDING: ReadonlySet<string> = new Set([
-  "fs.list",
-  "fs.read",
-  "fs.watch",
-  "fs.unwatch",
   "terminal.open",
   "terminal.input",
   "terminal.resize",
@@ -175,6 +171,23 @@ export function dispatch(conn: ConnState, raw: string, send: Send, deps: Dispatc
 
       case "env.remove":
         deps.supervisor.removeEnvironment(cmd.id);
+        if (cid) send(ack(cid));
+        return;
+
+      case "fs.list": {
+        const r = deps.supervisor.fsList(cmd.sessionId, cmd.path);
+        send({ v: PROTOCOL_VERSION, type: "fs.list.result", ts: now(), cid, sessionId: cmd.sessionId, path: r.path, entries: r.entries });
+        return;
+      }
+      case "fs.read":
+        send({ v: PROTOCOL_VERSION, type: "fs.read.result", ts: now(), cid, content: deps.supervisor.fsRead(cmd.sessionId, cmd.path) });
+        return;
+      case "fs.watch":
+        deps.supervisor.fsWatch(cmd.sessionId, cmd.path);
+        if (cid) send(ack(cid));
+        return;
+      case "fs.unwatch":
+        deps.supervisor.fsUnwatch(cmd.sessionId, cmd.path);
         if (cid) send(ack(cid));
         return;
 
