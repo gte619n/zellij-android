@@ -54,6 +54,29 @@ export class AgentDriver {
     this.q = undefined;
   }
 
+  /**
+   * Keep Claude Code's default system prompt, but for worktree sessions pin it to the worktree
+   * so it doesn't wander into the original checkout it can discover via `git worktree list`/docs
+   * (which breaks isolation and the sandboxed reader). (arch §5)
+   */
+  private systemPrompt(): { type: "preset"; preset: "claude_code"; append?: string } {
+    const s = this.session.data;
+    if (s.source === "fresh-worktree") {
+      const where = s.worktree ? ` (branch "${s.worktree.branch}", based on "${s.worktree.base}")` : "";
+      return {
+        type: "preset",
+        preset: "claude_code",
+        append:
+          `\n\nWORKING DIRECTORY: You are operating inside an isolated git worktree at "${s.cwd}"${where}. ` +
+          `This worktree is your ONLY workspace and already contains the full checkout. Always read, search, and edit files ` +
+          `within this directory (use relative paths, or absolute paths under it). NEVER read from or write to the original ` +
+          `repository checkout or any absolute path outside this worktree — even if you discover its location via ` +
+          "`git worktree list`, git metadata, or documentation. All work for this task must stay in this worktree so it can be reviewed as a branch.",
+      };
+    }
+    return { type: "preset", preset: "claude_code" };
+  }
+
   private ensureStarted(): void {
     if (this.q) return;
     const s = this.session;
@@ -62,6 +85,7 @@ export class AgentDriver {
       options: {
         model: s.data.model, // "opus" | "sonnet" — Claude Code accepts the aliases
         cwd: s.data.cwd,
+        systemPrompt: this.systemPrompt(),
         resume: s.data.claudeSessionId,
         includePartialMessages: true,
         permissionMode: "default",

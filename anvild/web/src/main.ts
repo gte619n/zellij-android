@@ -295,6 +295,7 @@ let streamRaf = 0;
 
 function appendDelta(text: string): void {
   if (!streaming) {
+    hideThinking(); // the streaming text itself is now the activity
     streaming = bubble("assistant");
     streaming.innerHTML = '<div class="md"></div>';
     streamText = "";
@@ -302,11 +303,36 @@ function appendDelta(text: string): void {
   streamText += text;
   if (!streamRaf) streamRaf = requestAnimationFrame(renderStream);
 }
+const STREAM_TAIL_LINES = 10;
 function renderStream(): void {
   streamRaf = 0;
   const md = streaming?.querySelector(".md");
-  if (md) md.innerHTML = streamMd.render(streamText);
+  if (md) {
+    // While streaming, show only the trailing lines so an in-flight turn stays compact;
+    // the full, authoritative message replaces this on commit (assistant.message).
+    const lines = streamText.split("\n");
+    const tail = lines.length > STREAM_TAIL_LINES ? "…\n" + lines.slice(-STREAM_TAIL_LINES).join("\n") : streamText;
+    md.innerHTML = streamMd.render(tail);
+  }
   scrollDown();
+}
+// Animated "thinking" indicator (like Claude's), pinned to the bottom while a turn runs.
+let thinkingEl: HTMLElement | null = null;
+const THINK_LABEL: Record<string, string> = { thinking: "Thinking", running_tool: "Working", running: "Working" };
+function showThinking(status: string): void {
+  if (!thinkingEl) {
+    thinkingEl = document.createElement("div");
+    thinkingEl.className = "thinking";
+    thinkingEl.innerHTML = `<span class="dots"><i></i><i></i><i></i></span><span class="think-label"></span>`;
+  }
+  const label = thinkingEl.querySelector(".think-label");
+  if (label) label.textContent = THINK_LABEL[status] ?? "Thinking";
+  conversation.appendChild(thinkingEl); // move to the bottom
+  scrollDown();
+}
+function hideThinking(): void {
+  thinkingEl?.remove();
+  thinkingEl = null;
 }
 function commitAssistant(blocks: ContentBlock[]): void {
   if (streamRaf) {
@@ -359,6 +385,7 @@ function appendToolResult(content: string, isError: boolean): void {
 function clearConversation(): void {
   conversation.innerHTML = "";
   streaming = null;
+  thinkingEl = null; // detached by the innerHTML reset
 }
 const EMPTY_ART = `<svg class="empty-art" viewBox="0 0 200 130" width="150" height="98" aria-hidden="true" fill="currentColor">
   <rect x="30" y="40" width="140" height="22" rx="6" />
@@ -368,6 +395,7 @@ const EMPTY_ART = `<svg class="empty-art" viewBox="0 0 200 130" width="150" heig
 </svg>`;
 function renderEmptyState(): void {
   streaming = null;
+  thinkingEl = null;
   conversation.innerHTML = `<div class="empty-state">${EMPTY_ART}<p>Select a session, or create a new one.</p></div>`;
 }
 /** No session selected: reset the title, show the empty state, drop the persisted active id. */
@@ -380,6 +408,8 @@ function deselectSession(): void {
 }
 function setStatus(status: string): void {
   $("#status").textContent = status === "idle" ? "" : status.replace("_", " ") + "…";
+  if (status === "idle") hideThinking();
+  else if (!streaming) showThinking(status); // while text streams, the text is the activity
   const s = activeId ? sessions.get(activeId) : undefined;
   if (s) {
     s.status = status as Session["status"];

@@ -22,7 +22,9 @@ const KEEP = [
 ] as const;
 
 export function buildAgentEnv(src: Record<string, string | undefined> = process.env): Record<string, string> {
-  const out: Record<string, string> = {};
+  // _ZO_DOCTOR=0 silences zoxide's "detected a configuration issue" banner in spawned shells
+  // (the Bash tool + terminal PTY), which otherwise spams tool output and the terminal.
+  const out: Record<string, string> = { _ZO_DOCTOR: "0" };
   for (const k of KEEP) {
     const v = src[k];
     if (typeof v === "string" && v.length > 0) out[k] = v;
