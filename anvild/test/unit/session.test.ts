@@ -35,12 +35,15 @@ test("resume replays events after lastSeq, and snapshots from scratch", () => {
   s.setStatus("thinking"); // seq 1 (persisted)
   s.setStatus("idle"); // seq 2
 
+  // resume replays events after lastSeq, then appends a trailing live-status sync
   const replay = sup.resume(s.id, 1);
-  expect(replay.map((e) => (e as any).seq)).toEqual([2]);
+  expect((replay[0] as any).seq).toBe(2); // the seq-2 event
+  expect(replay.at(-1)!.type).toBe("status"); // trailing live status
+  expect((replay.at(-1) as any).status).toBe("idle");
 
   const snap = sup.resume(s.id, undefined);
-  expect(snap).toHaveLength(1);
   expect(snap[0]!.type).toBe("conversation.snapshot");
+  expect(snap.at(-1)!.type).toBe("status"); // current status synced on attach
   rmSync(dir, { recursive: true, force: true });
 });
 

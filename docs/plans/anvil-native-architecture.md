@@ -22,7 +22,10 @@ What's actually running today (branch `anvil-daemon`):
   (commit/push/PR/merge via "ask Claude"; cleanup/abandon), Sonnet-chosen session icons,
   collapsible sidebar, dark mode, instant conversation restore, themed dialogs, Material
   Symbols (CDN), connection indicator. Worktree isolation enforced via a system-prompt pin.
-- ⏳ **Push (§6.7)** — only an in-memory registration registry exists; no FCM/APNs send path yet.
+- ✅ **Push (§6.7)** — Web Push for the web client: VAPID keys + persisted browser subscriptions
+  (`web-push`), service worker, a notify-toggle bell, and pushes on permission requests + turn
+  completion (SW suppresses if a window is focused; click deep-links to the session). FCM/APNs
+  for *native* clients still pending.
 - ❌ **Native clients** — Android (Compose), Mac/iPhone (SwiftUI) not started. The web client
   currently fills the "daily driver" role the native Android app was meant to.
 

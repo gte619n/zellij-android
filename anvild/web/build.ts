@@ -23,6 +23,8 @@ if (!result.success) {
 
 cpSync(join(root, "index.html"), join(dist, "index.html"));
 cpSync(join(root, "styles/app.css"), join(dist, "app.css"));
+cpSync(join(root, "sw.js"), join(dist, "sw.js")); // service worker (web push)
+cpSync(join(root, "manifest.json"), join(dist, "manifest.json"));
 
 // KaTeX stylesheet + fonts (math is server-rendered to HTML+MathML; the client just styles it)
 const katex = join(root, "../node_modules/katex/dist");

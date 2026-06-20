@@ -36,6 +36,7 @@ import { AttachmentStore } from "../attach/store";
 import { listDir, readFile, resolveInside } from "../fs/session-fs";
 import * as git from "../git/ops";
 import { pickIcon } from "../agent/icon";
+import { WebPush } from "../push/webpush";
 
 /** A client command that can't be honored (bad args, no such session). → command.error. */
 export class BadCommand extends Error {}
@@ -64,12 +65,14 @@ export class Supervisor {
   private readonly budgetTracker: BudgetTracker;
   private readonly envStore: EnvironmentStore;
   private readonly attachStore: AttachmentStore;
+  readonly webpush: WebPush;
 
   constructor(cfg: SupervisorConfig, private readonly registry: ConnectionRegistry) {
     this.renderer = cfg.renderer ?? new PassthroughRenderer();
     this.store = new SessionStore(cfg.stateDir);
     this.envStore = new EnvironmentStore(cfg.stateDir);
     this.attachStore = new AttachmentStore(cfg.stateDir);
+    this.webpush = new WebPush(cfg.stateDir);
     this.budgetTracker = new BudgetTracker({
       stateDir: cfg.stateDir,
       warnFraction: cfg.warnFraction ?? 0.8,
@@ -113,8 +116,11 @@ export class Supervisor {
     const s = this.require(id);
     const log = this.logs.get(id);
     if (!log) return [];
-    if (lastSeq === undefined) return [log.snapshot(id, s.lastSeq)];
-    return log.since(lastSeq);
+    const events = lastSeq === undefined ? [log.snapshot(id, s.lastSeq)] : log.since(lastSeq);
+    // Always end with the live status so a re-attaching client's thinking indicator reflects
+    // reality (the per-turn `status` events it missed while detached aren't replayed).
+    events.push({ v: PROTOCOL_VERSION, type: "status", ts: now(), sessionId: id, seq: s.lastSeq, status: s.data.status });
+    return events;
   }
 
   list(): SessionData[] {
@@ -479,10 +485,23 @@ export class Supervisor {
     return new Session(
       data,
       lastSeq,
-      (sessionId, event) => this.registry.toAttached(sessionId, event),
+      (sessionId, event) => {
+        this.registry.toAttached(sessionId, event);
+        this.maybeNotify(sessionId, event);
+      },
       () => this.persist(),
       (event) => log.append(event),
     );
+  }
+
+  /** Push a notification on the events that mean "your turn" (arch §6.7). */
+  private maybeNotify(sessionId: string, event: ServerEvent): void {
+    const title = this.sessions.get(sessionId)?.data.title ?? "Anvil";
+    if (event.type === "permission.request") {
+      void this.webpush.notify({ title, body: `Needs approval: ${event.tool}`, sessionId, tag: `perm-${sessionId}` });
+    } else if (event.type === "result") {
+      void this.webpush.notify({ title, body: "Claude finished — your turn.", sessionId, tag: `done-${sessionId}` });
+    }
   }
 
   /** Per-turn cost → budget tracker; broadcast the new budget; advise once at soft-stop. */

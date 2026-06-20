@@ -91,6 +91,28 @@ export function createServer(opts: ServerOptions): ServerHandle {
         return Response.json(body);
       }
 
+      // Web Push (arch §6.7): VAPID public key + browser subscription management
+      if (url.pathname === "/api/push/key" && req.method === "GET") {
+        return Response.json({ publicKey: supervisor.webpush.publicKey });
+      }
+      if (url.pathname === "/api/push/subscribe" && req.method === "POST") {
+        try {
+          supervisor.webpush.subscribe((await req.json()) as never);
+          return Response.json({ ok: true });
+        } catch {
+          return new Response("bad subscription", { status: 400 });
+        }
+      }
+      if (url.pathname === "/api/push/unsubscribe" && req.method === "POST") {
+        try {
+          const { endpoint } = (await req.json()) as { endpoint?: string };
+          if (endpoint) supervisor.webpush.unsubscribe(endpoint);
+          return Response.json({ ok: true });
+        } catch {
+          return new Response("bad request", { status: 400 });
+        }
+      }
+
       if (url.pathname === "/ws") {
         const data: ConnState = { id: newId("conn"), attached: new Set() };
         if (srv.upgrade(req, { data })) return undefined;

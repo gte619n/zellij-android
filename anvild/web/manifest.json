@@ -1,0 +1,10 @@
+{
+  "name": "Anvil",
+  "short_name": "Anvil",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a1b1e",
+  "theme_color": "#1a1b1e",
+  "icons": []
+}

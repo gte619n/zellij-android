@@ -47,7 +47,9 @@ const scrollDown = () => {
 // ── State ────────────────────────────────────────────────────────────────────
 const sessions = new Map<string, Session>();
 const environments = new Map<string, Environment>();
-let activeId: string | null = localStorage.getItem("anvil.active");
+// a notification-click deep link (/?session=ID) wins over the last-active session
+let activeId: string | null = new URLSearchParams(location.search).get("session") || localStorage.getItem("anvil.active");
+if (location.search) history.replaceState({}, "", location.pathname);
 let streaming: HTMLElement | null = null;
 const snapshotLoaded = new Set<string>(); // sessions with a full snapshot loaded this page-load
 
@@ -65,7 +67,11 @@ function saveConvoCache(): void {
   clearTimeout(cacheTimer);
   cacheTimer = window.setTimeout(() => {
     try {
-      const html = conversation.innerHTML;
+      // Don't persist transient UI (the thinking indicator / empty state) — it would
+      // re-paint as a frozen "stuck" status on return.
+      const clone = conversation.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll(".thinking, .empty-state").forEach((e) => e.remove());
+      const html = clone.innerHTML;
       if (html.length < 1_500_000) localStorage.setItem(`anvil.convo.${id}`, html);
       else localStorage.removeItem(`anvil.convo.${id}`);
     } catch {
@@ -123,6 +129,60 @@ $("#btn-sidebar").addEventListener("click", () => {
 const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 const sock = new AnvilSocket(wsUrl, onEvent, onStatus);
 sock.connect();
+
+// ── Web Push (arch §6.7) ──────────────────────────────────────────────────────────
+let swReg: ServiceWorkerRegistration | null = null;
+const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+function urlB64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  const arr = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function initPush(): Promise<void> {
+  if (!pushSupported) return; // unsupported (e.g. iOS Safari until installed as a PWA)
+  const bell = $("#btn-notify");
+  bell.hidden = false;
+  try {
+    swReg = await navigator.serviceWorker.register("/sw.js");
+  } catch {
+    bell.hidden = true;
+    return;
+  }
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.type === "open-session" && e.data.sessionId && sessions.has(e.data.sessionId)) selectSession(e.data.sessionId);
+  });
+  bell.addEventListener("click", () => void toggleNotify());
+  void refreshBell();
+}
+async function refreshBell(): Promise<void> {
+  const sub = await swReg?.pushManager.getSubscription();
+  const on = Notification.permission === "granted" && !!sub;
+  const bell = $("#btn-notify");
+  bell.innerHTML = icon(on ? "notifications_active" : "notifications_off");
+  bell.classList.toggle("active", on);
+}
+async function toggleNotify(): Promise<void> {
+  if (!swReg) return;
+  const existing = await swReg.pushManager.getSubscription();
+  if (existing) {
+    await fetch("/api/push/unsubscribe", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: existing.endpoint }) });
+    await existing.unsubscribe();
+    toast("Notifications off");
+  } else {
+    if ((await Notification.requestPermission()) !== "granted") {
+      toast("Notifications blocked in browser settings");
+      return;
+    }
+    const { publicKey } = (await (await fetch("/api/push/key")).json()) as { publicKey: string };
+    const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(publicKey) });
+    await fetch("/api/push/subscribe", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sub) });
+    toast("Notifications on");
+  }
+  void refreshBell();
+}
+void initPush();
 
 // ── Connection status ────────────────────────────────────────────────────────
 function onStatus(status: "connecting" | "connected" | "disconnected"): void {
