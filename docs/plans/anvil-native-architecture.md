@@ -1,9 +1,33 @@
 # Anvil Native Architecture — Dropping Zellij
 
-**Version:** 0.1-draft
-**Created:** 2026-06-19
-**Status:** DESIGN / EXPLORATION
+**Version:** 0.2
+**Created:** 2026-06-19 · **Updated:** 2026-06-20
+**Status:** PARTIALLY IMPLEMENTED — daemon + web client shipping; native clients pending. See §10.
 **Supersedes (eventually):** the Zellij web-client approach in `SPEC.md`
+
+---
+
+## 0. Build status (2026-06-20)
+
+What's actually running today (branch `anvil-daemon`):
+
+- ✅ **`anvild` daemon** — session supervisor, Agent SDK streaming (Opus/Sonnet), persisted
+  event log, versioned WS protocol (`anvil-protocol.ts` v0.5), §3 auth assertions, usage
+  budget, mostly-autonomous + danger-list, runs as a macOS LaunchAgent behind Tailscale.
+- ✅ **§8.3 render pipeline** — markdown-it + Shiki + KaTeX + DOMPurify; mermaid in-client.
+- ✅ **Web client** (NEW surface, not in the original phased plan) — vanilla TS served by the
+  daemon at `/`; this is the current daily driver. Streaming render, select-to-cite, markdown
+  reader (§8.2) with live `fs.watch`, file browser (§8.1), terminal (§7, `Bun.Terminal` PTY),
+  image attachments (§6.5), environments (worktree-per-session), full git lifecycle
+  (commit/push/PR/merge via "ask Claude"; cleanup/abandon), Sonnet-chosen session icons,
+  collapsible sidebar, dark mode, instant conversation restore, themed dialogs, Material
+  Symbols (CDN), connection indicator. Worktree isolation enforced via a system-prompt pin.
+- ⏳ **Push (§6.7)** — only an in-memory registration registry exists; no FCM/APNs send path yet.
+- ❌ **Native clients** — Android (Compose), Mac/iPhone (SwiftUI) not started. The web client
+  currently fills the "daily driver" role the native Android app was meant to.
+
+Nearest-term candidates: (a) real push delivery, (b) make the web client an installable PWA,
+or (c) start the native clients. See §10.
 
 ---
 
@@ -523,6 +547,11 @@ Two client-stack decisions remain open (see §11).
 
 Build the daemon first — it is the keystone and is independently testable. **Detailed
 per-component implementation plans live in `anvil-impl-INDEX.md` and `anvil-impl-1..6-*.md`.**
+
+> **Status note (2026-06-20):** Phase 1 ✅ and Phase 3 ✅ are done. A **web client** (not in
+> this list) was built on top of the daemon and became the daily driver, covering most of what
+> Phase 2's native Android app was for. Phases 2/4/5 (native clients) are not started; push
+> delivery (§6.7) is stubbed. See §0 for the full status. The list below is the original intent.
 
 1. **`anvild` MVP** — session supervisor + Agent SDK streaming (Opus default) + persisted
    event log + WS API + §3 auth assertions + **usage-budget tracking with warn/soft-stop**

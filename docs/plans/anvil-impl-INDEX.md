@@ -1,10 +1,16 @@
 # Anvil Implementation Plans — Index
 
-**Created:** 2026-06-19 | **Status:** draft set
+**Created:** 2026-06-19 | **Updated:** 2026-06-20 | **Status:** plans 1 & 4 shipped; a web client (not planned here) is the daily driver; native clients (2/5) + push send path not started
 
 These are the component implementation plans for the Anvil re-architecture (dropping
 Zellij). They build on the locked design in `anvil-native-architecture.md` and the wire
-contract in `anvil-protocol.ts` (now v0.2 — amended below per planning findings).
+contract in `anvil-protocol.ts` (now **v0.5** — git lifecycle + env defaults + session
+icons added since these plans were written; see the file header).
+
+> **Reality check (2026-06-20):** Plan 1 (daemon core) and Plan 4 (terminal + file browser)
+> are implemented. Instead of starting with Plan 3 (native Android), a **web client** served
+> by the daemon was built and is the current daily driver — so Plans 3/5 (native clients) and
+> Plan 6's push *send* path remain open. See `anvil-native-architecture.md` §0 for full status.
 
 ## The plans
 
