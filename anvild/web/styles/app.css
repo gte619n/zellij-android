@@ -117,8 +117,13 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 .git-panel textarea, .git-panel input, .git-panel select { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--bg); color: var(--text); resize: vertical; }
 .git-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .git-row select { width: auto; }
-.git-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.git-stages button { justify-content: center; }
+.git-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.git-stages button { flex-direction: column; gap: 5px; padding: 13px 8px; border-radius: 12px; font-weight: 600; transition: border-color 0.12s, background 0.12s, transform 0.08s; }
+.git-stages button .msym { font-size: 26px; color: var(--accent); font-variation-settings: "FILL" 1; }
+.git-stages button:not(:disabled):hover { border-color: var(--accent); background: var(--panel); }
+.git-stages button:not(:disabled):active { transform: scale(0.97); }
+.git-stages button:disabled { opacity: 1; color: var(--muted); background: transparent; }
+.git-stages button:disabled .msym { color: var(--border); }
 .git-panel button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
 .git-panel button .msym { font-size: 18px; }
 .git-panel button:disabled { opacity: 0.5; cursor: default; }

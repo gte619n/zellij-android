@@ -857,7 +857,7 @@ const STAGE_PROMPT: Record<Stage, string> = {
 const STAGE_META: { key: Stage; icon: string; label: string }[] = [
   { key: "commit", icon: "commit", label: "Commit" },
   { key: "push", icon: "cloud_upload", label: "Push" },
-  { key: "pr", icon: "rocket_launch", label: "PR" },
+  { key: "pr", icon: "call_merge", label: "PR" },
   { key: "merge", icon: "merge", label: "Merge" },
 ];
 /** Which stages still have work to do, given the current source-control state. */
