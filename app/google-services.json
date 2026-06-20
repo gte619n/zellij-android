@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1059574278871",
+    "project_id": "gte619n-anvil",
+    "storage_bucket": "gte619n-anvil.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1059574278871:android:f2a67ca798f942ade8de92",
+        "android_client_info": {
+          "package_name": "com.gte619n.anvil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgUNTrvyrbUWTehA120_sjU5rf4C9BIPg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
