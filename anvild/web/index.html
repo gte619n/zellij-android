@@ -22,8 +22,11 @@
         <header id="header"><span id="header-title">Anvil</span><span id="status"></span></header>
         <div id="conversation"></div>
         <form id="composer">
-          <textarea id="input" rows="3" placeholder="Message Claude…  (Enter to send · Shift+Enter for newline)"></textarea>
-          <button type="submit" id="send">Send</button>
+          <div id="attach-row"></div>
+          <div class="composer-row">
+            <textarea id="input" rows="3" placeholder="Message Claude…  (Enter to send · Shift+Enter for newline · paste an image)"></textarea>
+            <button type="submit" id="send">Send</button>
+          </div>
         </form>
       </main>
     </div>

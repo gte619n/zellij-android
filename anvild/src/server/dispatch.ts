@@ -134,8 +134,7 @@ export function dispatch(conn: ConnState, raw: string, send: Send, deps: Dispatc
             .join("\n\n");
           text = `${ctx}\n\n${text}`;
         }
-        // NOTE: attachmentIds are accepted but not yet materialized (REST upload is §6.5).
-        deps.supervisor.prompt(cmd.sessionId, text);
+        deps.supervisor.prompt(cmd.sessionId, text, cmd.attachmentIds ?? []);
         if (cid) send(ack(cid));
         return;
       }

@@ -97,6 +97,29 @@ export function createServer(opts: ServerOptions): ServerHandle {
         return new Response("expected a websocket upgrade", { status: 426 });
       }
 
+      // attachments (arch §6.5): POST uploads a pasted/dropped file, GET serves it back
+      const attMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/attachments(?:\/([^/]+))?$/);
+      if (attMatch) {
+        const sessionId = attMatch[1]!;
+        const attId = attMatch[2];
+        if (req.method === "POST" && !attId) {
+          try {
+            const body = (await req.json()) as { name?: string; mediaType?: string; dataBase64?: string };
+            if (!body.mediaType || !body.dataBase64) return new Response("name, mediaType, dataBase64 required", { status: 400 });
+            const attachment = supervisor.addAttachment(sessionId, body.name ?? "attachment", body.mediaType, body.dataBase64);
+            return Response.json({ attachment } satisfies rest.UploadAttachmentResponse);
+          } catch (e) {
+            return new Response(e instanceof Error ? e.message : "upload failed", { status: 400 });
+          }
+        }
+        if (req.method === "GET" && attId) {
+          const b = supervisor.attachmentBytes(sessionId, attId);
+          if (!b) return new Response("not found", { status: 404 });
+          return new Response(Bun.file(b.path), { headers: { "Content-Type": b.mediaType, "Cache-Control": "max-age=31536000" } });
+        }
+        return new Response("method not allowed", { status: 405 });
+      }
+
       // static web client (built into web/dist)
       const web = await serveWeb(url.pathname);
       if (web) return web;

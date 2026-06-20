@@ -34,11 +34,26 @@ export class InputQueue implements AsyncIterable<SDKUserMessage> {
   }
 }
 
-/** Build an SDK user message carrying a plain-text prompt. */
-export function userMessage(text: string): SDKUserMessage {
+export interface InlineImage {
+  mediaType: string;
+  data: string; // base64
+}
+
+/** Build an SDK user message: text, plus any pasted images as inline image blocks (arch §6.5). */
+export function userMessage(text: string, images: InlineImage[] = []): SDKUserMessage {
+  const content =
+    images.length === 0
+      ? text
+      : [
+          ...(text ? [{ type: "text", text }] : []),
+          ...images.map((img) => ({
+            type: "image",
+            source: { type: "base64", media_type: img.mediaType, data: img.data },
+          })),
+        ];
   return {
     type: "user",
-    message: { role: "user", content: text },
+    message: { role: "user", content },
     parent_tool_use_id: null,
     session_id: "",
   } as unknown as SDKUserMessage;

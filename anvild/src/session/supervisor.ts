@@ -28,6 +28,7 @@ import { PassthroughRenderer, type MarkdownRenderer } from "../render/markdown";
 import { EventLog } from "../eventlog/log";
 import { BudgetTracker } from "../budget/tracker";
 import { EnvironmentStore } from "../env/store";
+import { AttachmentStore } from "../attach/store";
 
 /** A client command that can't be honored (bad args, no such session). → command.error. */
 export class BadCommand extends Error {}
@@ -55,11 +56,13 @@ export class Supervisor {
   private readonly agentEnv = buildAgentEnv();
   private readonly budgetTracker: BudgetTracker;
   private readonly envStore: EnvironmentStore;
+  private readonly attachStore: AttachmentStore;
 
   constructor(cfg: SupervisorConfig, private readonly registry: ConnectionRegistry) {
     this.renderer = cfg.renderer ?? new PassthroughRenderer();
     this.store = new SessionStore(cfg.stateDir);
     this.envStore = new EnvironmentStore(cfg.stateDir);
+    this.attachStore = new AttachmentStore(cfg.stateDir);
     this.budgetTracker = new BudgetTracker({
       stateDir: cfg.stateDir,
       warnFraction: cfg.warnFraction ?? 0.8,
@@ -158,9 +161,25 @@ export class Supervisor {
     return session; // dispatch announces session.created (creator gets the cid; others via registry)
   }
 
+  // Attachments (arch §6.5) — uploaded via REST, fed to the agent as image blocks.
+  addAttachment(sessionId: string, name: string, mediaType: string, dataBase64: string): AttachmentRef {
+    this.require(sessionId);
+    return this.attachStore.add(sessionId, name, mediaType, dataBase64);
+  }
+  attachmentBytes(sessionId: string, id: string): { mediaType: string; path: string } | undefined {
+    return this.attachStore.bytes(sessionId, id);
+  }
+
   /** Send a user turn to the session's agent (arch §6.2), starting the driver lazily. */
-  prompt(id: string, text: string, attachments: AttachmentRef[] = []): void {
+  prompt(id: string, text: string, attachmentIds: string[] = []): void {
     const s = this.require(id);
+    const attachments = attachmentIds
+      .map((aid) => this.attachStore.ref(id, aid))
+      .filter((r): r is AttachmentRef => r !== undefined);
+    const images = attachmentIds
+      .map((aid) => this.attachStore.loadBase64(id, aid))
+      .filter((x): x is { mediaType: string; data: string } => x !== undefined);
+
     // record the user's prompt so history/snapshot includes it and all devices agree (arch §6.4)
     s.emit({ type: "message.user", rendered: this.renderer.render(text), attachments });
     let driver = this.drivers.get(id);
@@ -170,7 +189,7 @@ export class Supervisor {
       );
       this.drivers.set(id, driver);
     }
-    driver.prompt(text);
+    driver.prompt(text, images);
   }
 
   interrupt(id: string): void {

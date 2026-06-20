@@ -1,5 +1,6 @@
 import { AnvilSocket } from "./ws";
 import type {
+  AttachmentRef,
   Budget,
   ContentBlock,
   ConversationEvent,
@@ -113,7 +114,7 @@ function handleSessionEvent(e: ServerEvent): void {
       e.events.forEach(renderConversationEvent);
       return;
     case "message.user":
-      appendUser(e.rendered.html);
+      appendUser(e.rendered.html, e.attachments);
       return;
     case "assistant.delta":
       appendDelta(e.text);
@@ -142,7 +143,7 @@ function handleSessionEvent(e: ServerEvent): void {
 
 // replay/snapshot events fold into the same renderers
 function renderConversationEvent(ev: ConversationEvent): void {
-  if (ev.kind === "user") appendUser(ev.rendered.html);
+  if (ev.kind === "user") appendUser(ev.rendered.html, ev.attachments);
   else if (ev.kind === "assistant") commitAssistant(ev.blocks);
   else if (ev.kind === "tool_result") appendToolResult(ev.content, ev.isError);
 }
@@ -155,11 +156,20 @@ function bubble(role: string): HTMLElement {
   scrollDown();
   return el;
 }
-function appendUser(html: string): void {
+function appendUser(html: string, attachments: AttachmentRef[] = []): void {
+  const b = bubble("user");
   const md = document.createElement("div");
   md.className = "md";
   md.innerHTML = html; // daemon-sanitized (arch §8.3)
-  bubble("user").appendChild(md);
+  b.appendChild(md);
+  for (const att of attachments) {
+    if (att.kind === "image" && activeId) {
+      const img = document.createElement("img");
+      img.className = "att-img";
+      img.src = `/api/sessions/${activeId}/attachments/${att.id}`;
+      b.appendChild(img);
+    }
+  }
   scrollDown();
 }
 function appendDelta(text: string): void {
@@ -266,17 +276,84 @@ function selectSession(id: string): void {
 
 // ── Composer ───────────────────────────────────────────────────────────────────
 const input = $<HTMLTextAreaElement>("#input");
+const pendingAttachments: { id: string; name: string; dataUrl: string }[] = [];
+const attachRow = $("#attach-row");
+
 $<HTMLFormElement>("#composer").addEventListener("submit", (e) => {
   e.preventDefault();
   const text = input.value;
-  if (!activeId || !text.trim()) return;
-  sock.send({ type: "prompt.send", sessionId: activeId, text });
+  if (!activeId || (!text.trim() && pendingAttachments.length === 0)) return;
+  sock.send({ type: "prompt.send", sessionId: activeId, text, attachmentIds: pendingAttachments.map((a) => a.id) });
   input.value = "";
+  pendingAttachments.length = 0;
+  renderAttachRow();
 });
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     $<HTMLFormElement>("#composer").requestSubmit();
+  }
+});
+
+function renderAttachRow(): void {
+  attachRow.innerHTML = "";
+  pendingAttachments.forEach((a, i) => {
+    const chip = document.createElement("div");
+    chip.className = "attach-chip";
+    chip.innerHTML = `<img src="${a.dataUrl}" alt="${esc(a.name)}" /><button type="button" class="rm" title="Remove">×</button>`;
+    chip.querySelector(".rm")!.addEventListener("click", () => {
+      pendingAttachments.splice(i, 1);
+      renderAttachRow();
+    });
+    attachRow.appendChild(chip);
+  });
+}
+async function uploadAttachment(file: File): Promise<void> {
+  if (!activeId) {
+    toast("Open a session first");
+    return;
+  }
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+  const base64 = dataUrl.split(",")[1] ?? "";
+  try {
+    const res = await fetch(`/api/sessions/${activeId}/attachments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name || "pasted-image.png", mediaType: file.type || "image/png", dataBase64: base64 }),
+    });
+    if (!res.ok) {
+      toast("Upload failed");
+      return;
+    }
+    const { attachment } = (await res.json()) as { attachment: { id: string; name: string } };
+    pendingAttachments.push({ id: attachment.id, name: attachment.name, dataUrl });
+    renderAttachRow();
+  } catch {
+    toast("Upload failed");
+  }
+}
+input.addEventListener("paste", (e) => {
+  for (const item of Array.from(e.clipboardData?.items ?? [])) {
+    if (item.type.startsWith("image/")) {
+      const f = item.getAsFile();
+      if (f) {
+        e.preventDefault();
+        void uploadAttachment(f);
+      }
+    }
+  }
+});
+const composerEl = $("#composer");
+composerEl.addEventListener("dragover", (e) => e.preventDefault());
+composerEl.addEventListener("drop", (e) => {
+  e.preventDefault();
+  for (const f of Array.from((e as DragEvent).dataTransfer?.files ?? [])) {
+    if (f.type.startsWith("image/")) void uploadAttachment(f);
   }
 });
 

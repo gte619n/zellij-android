@@ -1,6 +1,6 @@
 import { query, type Query } from "@anthropic-ai/claude-agent-sdk";
 import type { Model } from "@protocol";
-import { InputQueue, userMessage } from "./input-queue";
+import { InputQueue, userMessage, type InlineImage } from "./input-queue";
 import { extractResultUsage, extractSessionId, mapMessage } from "./map";
 import { makePreToolUseHook, type PermissionBroker } from "./permissions";
 import type { Session } from "../session/session";
@@ -26,10 +26,10 @@ export class AgentDriver {
     private readonly onResult: ResultRecorder,
   ) {}
 
-  prompt(text: string): void {
+  prompt(text: string, images: InlineImage[] = []): void {
     this.ensureStarted();
     this.session.setStatus("thinking");
-    this.input.push(userMessage(text));
+    this.input.push(userMessage(text, images));
   }
 
   async interrupt(): Promise<void> {
