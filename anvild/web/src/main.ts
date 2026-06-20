@@ -126,9 +126,9 @@ sock.connect();
 
 // ── Connection status ────────────────────────────────────────────────────────
 function onStatus(status: "connecting" | "connected" | "disconnected"): void {
-  const el = $("#conn");
-  el.textContent = status;
-  el.className = `conn ${status}`;
+  const dot = $("#conn-dot");
+  dot.className = `conn-dot ${status}`;
+  dot.title = status === "connected" ? "Connected" : status === "connecting" ? "Connecting…" : "Disconnected";
   // (re)attach happens in the session.list handler, which the daemon sends on every connect.
 }
 
@@ -407,7 +407,6 @@ function deselectSession(): void {
   renderSessions();
 }
 function setStatus(status: string): void {
-  $("#status").textContent = status === "idle" ? "" : status.replace("_", " ") + "…";
   if (status === "idle") hideThinking();
   else if (!streaming) showThinking(status); // while text streams, the text is the activity
   const s = activeId ? sessions.get(activeId) : undefined;

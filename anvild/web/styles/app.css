@@ -56,10 +56,13 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
   background: var(--panel); display: flex; flex-direction: column; padding: 12px; gap: 10px;
 }
 .side-head { display: flex; align-items: center; justify-content: space-between; }
+.brand { font-weight: 700; font-size: 15px; letter-spacing: 0.3px; }
 .theme-toggle { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; }
-.conn { font-size: 12px; color: var(--muted); }
-.conn.connected { color: #16a34a; }
-.conn.disconnected { color: var(--danger); }
+/* connection status dot, shown left of the session name */
+.conn-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+.conn-dot.connected { background: #21ba45; }
+.conn-dot.connecting { background: #f2c037; animation: think-pulse 1.4s infinite ease-in-out; }
+.conn-dot.disconnected { background: var(--danger); }
 .budget { font-size: 12px; color: var(--muted); padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .budget.warn { color: var(--warn); border-color: var(--warn); }
 #new-session { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
@@ -81,7 +84,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 #header-title .msym { font-size: 18px; color: var(--accent); }
 #header-left { display: flex; align-items: center; gap: 10px; }
 #header-actions { display: flex; align-items: center; gap: 8px; }
-#status { font-size: 12px; color: var(--accent); }
 .hbtn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
 .hbtn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
