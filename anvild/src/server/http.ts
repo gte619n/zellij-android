@@ -20,10 +20,10 @@ const WEB_DIR = join(import.meta.dir, "..", "..", "web", "dist");
 const CSP = [
   "default-src 'self'",
   "img-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'", // Shiki inline color vars + KaTeX/mermaid styles
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Shiki/KaTeX/mermaid + Material Symbols (CDN)
   "script-src 'self'",
   "connect-src 'self' ws: wss:",
-  "font-src 'self'",
+  "font-src 'self' https://fonts.gstatic.com", // Material Symbols woff2 from Google's CDN (bundled in native apps)
   "object-src 'none'",
   "base-uri 'none'",
 ].join("; ");

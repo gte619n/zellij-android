@@ -34,12 +34,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 
-@font-face {
-  font-family: "Material Symbols Rounded";
-  font-style: normal;
-  font-weight: 100 700;
-  src: url("/material-symbols.woff2") format("woff2");
-}
+/* Material Symbols Rounded: web pulls the @font-face from Google's CDN (see index.html);
+   native client apps bundle the woff2 instead. */
 .msym {
   font-family: "Material Symbols Rounded";
   font-weight: normal;
