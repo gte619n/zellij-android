@@ -26,6 +26,7 @@ import type {
   FileContent,
   GitOp,
   GitResultEvent,
+  GitStatus,
   PermissionSuggestion,
   ServerEvent,
   Session,
@@ -36,6 +37,8 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => document.quer
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
 const slugify = (s: string): string =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+const icon = (name: string): string => `<span class="msym">${name}</span>`;
+const sessIcon = (s: Session): string => (s.archived ? "inventory_2" : s.source === "fresh-worktree" ? "account_tree" : "folder");
 const conversation = $("#conversation");
 const scrollDown = () => {
   conversation.scrollTop = conversation.scrollHeight;
@@ -84,15 +87,20 @@ if (activeId) {
 function currentTheme(): "light" | "dark" {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
+function applyThemeIcon(): void {
+  $("#theme-toggle").innerHTML = icon(currentTheme() === "dark" ? "light_mode" : "dark_mode");
+}
 (function initTheme() {
   const stored = localStorage.getItem("anvil.theme");
   const theme = stored ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   document.documentElement.dataset.theme = theme;
 })();
+applyThemeIcon();
 $("#theme-toggle").addEventListener("click", () => {
   const next = currentTheme() === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = next;
   localStorage.setItem("anvil.theme", next);
+  applyThemeIcon();
 });
 
 // ── Sidebar collapse ─────────────────────────────────────────────────────────────
@@ -131,7 +139,7 @@ function onEvent(e: ServerEvent): void {
       e.sessions.forEach((s) => sessions.set(s.id, s));
       renderSessions();
       if (activeId && sessions.has(activeId)) {
-        $("#header-title").textContent = sessions.get(activeId)!.title;
+        setHeaderTitle(sessions.get(activeId));
         // first attach this page-load → full snapshot (DOM was reloaded); a later reconnect
         // (DOM intact) → resume only new events from the watermark.
         if (snapshotLoaded.has(activeId)) {
@@ -366,10 +374,13 @@ function renderSessions(): void {
     const envName = s.environmentId ? environments.get(s.environmentId)?.name : undefined;
     const where = envName ?? s.git?.branch ?? s.source;
     const tag = s.archived ? "archived" : esc(s.status);
-    li.innerHTML = `<div class="title">${esc(s.title)}</div><div class="meta">${esc(where)} · ${tag} · ${esc(s.model)}</div>`;
+    li.innerHTML = `<div class="title">${icon(sessIcon(s))}<span class="t">${esc(s.title)}</span></div><div class="meta">${esc(where)} · ${tag} · ${esc(s.model)}</div>`;
     li.onclick = () => selectSession(s.id);
     ul.appendChild(li);
   }
+}
+function setHeaderTitle(s: Session | undefined): void {
+  $("#header-title").innerHTML = s ? `${icon(sessIcon(s))} ${esc(s.title)}` : "Anvil";
 }
 function onEnvironments(list: Environment[]): void {
   environments.clear();
@@ -393,7 +404,7 @@ function selectSession(id: string): void {
   }
   renderSessions();
   const s = sessions.get(id);
-  $("#header-title").textContent = s?.title ?? "Anvil";
+  setHeaderTitle(s);
   snapshotLoaded.delete(id);
   sock.send({ type: "session.attach", sessionId: id }); // full snapshot (always show history)
   if (isNarrow() && !sidebarCollapsed) {
@@ -680,6 +691,23 @@ function renderReader(content: FileContent): void {
   if (back) back.onclick = (e) => { e.preventDefault(); openPanel("files"); };
 }
 // ── Git panel ──────────────────────────────────────────────────────────────────
+function askClaude(instruction: string): void {
+  if (!activeId) return;
+  sock.send({ type: "prompt.send", sessionId: activeId, text: instruction });
+  toast("Asked Claude →");
+  closePanel(); // jump to the conversation to watch it work
+}
+const ASK = {
+  commit: "Stage and commit all current changes in this worktree with a clear, conventional commit message based on what changed.",
+  push: "Push the current branch to its origin remote (set the upstream with -u if it isn't set).",
+  createPr: "Create a GitHub pull request for the current branch using the gh CLI, with a concise title and a description summarizing the changes, then give me the PR URL.",
+  mergePr: "Merge the open pull request for this branch with `gh pr merge --squash --delete-branch`, and confirm when it's merged.",
+};
+function prButtonHtml(pr: GitStatus["prState"]): string {
+  if (pr === "open") return `<button type="button" id="ga-pr">${icon("merge")} Merge PR</button>`;
+  if (pr === "merged") return `<button type="button" id="ga-pr" disabled>${icon("check_circle")} PR merged</button>`;
+  return `<button type="button" id="ga-pr">${icon("rocket_launch")} Create PR</button>`;
+}
 function renderGit(): void {
   panelView = "git";
   setPanelTabs();
@@ -687,75 +715,125 @@ function renderGit(): void {
   const wt = s?.worktree;
   panelContent.innerHTML = `<div class="git-panel">
     <div class="git-status"><span id="git-status-text">${gitStatusLine(s)}</span>
-      <button type="button" class="mini" id="git-refresh">↻</button>
-      <button type="button" class="mini" id="git-view-diff">diff</button></div>
-    <div class="small muted git-worktree">${wt ? `worktree at <code>${esc(s!.cwd)}</code><br/>branched off <code>${esc(wt.base)}</code>` : esc(s?.cwd ?? "")}</div>
+      <button type="button" class="mini" id="git-refresh" title="Refresh">${icon("refresh")}</button>
+      <button type="button" class="mini" id="git-view-diff" title="View diff">${icon("difference")}</button></div>
+    <div class="small muted git-worktree">${wt ? `worktree at <code>${esc(s!.cwd)}</code><br/>off <code>${esc(wt.base)}</code>` : esc(s?.cwd ?? "")}</div>
     <hr />
-    <div class="small muted">Ask Claude to…</div>
     <div class="git-row">
-      <button type="button" id="ga-commit">Commit</button>
-      <button type="button" id="ga-push">Push</button>
-      <button type="button" id="ga-sync">Sync w/ main</button>
-    </div>
-    <label class="small muted">Notes for the commit / PR (optional)<textarea id="git-notes" rows="2"></textarea></label>
-    <div class="git-row">
-      <button type="button" id="ga-pr">Create PR</button>
-      <button type="button" id="ga-merge">Merge PR</button>
+      <button type="button" id="ga-commit">${icon("commit")} Commit</button>
+      <button type="button" id="ga-push">${icon("cloud_upload")} Push</button>
+      ${prButtonHtml(s?.git?.prState)}
     </div>
     <hr />
-    <div class="small muted">Session</div>
     <div class="git-row">
-      <button type="button" id="git-archive">${s?.archived ? "Unarchive" : "Archive"}</button>
-      <button type="button" class="danger" id="git-delete">Delete session</button>
+      <button type="button" id="ga-cleanup">${icon("cleaning_services")} Cleanup</button>
+      <button type="button" class="danger" id="ga-abandon">${icon("delete_forever")} Abandon</button>
     </div>
     <pre class="git-output" id="git-output"></pre>
   </div>`;
 
-  // read-only info straight from the daemon (no side effects)
   const info = (o: GitOp): void => {
     if (!activeId) return;
     setGitOutput(`running ${o}…`);
     sock.send({ type: "git", sessionId: activeId, op: o });
   };
-  // actions = instruct Claude, then jump to the conversation to watch it work
-  const ask = (instruction: string): void => {
-    if (!activeId) return;
-    const notes = $<HTMLTextAreaElement>("#git-notes").value.trim();
-    sock.send({ type: "prompt.send", sessionId: activeId, text: notes ? `${instruction}\n\nNotes: ${notes}` : instruction });
-    toast("Asked Claude →");
-    closePanel();
-  };
-
   $("#git-refresh").onclick = () => info("status");
   $("#git-view-diff").onclick = () => info("diff");
-  $("#ga-commit").onclick = () => ask("Stage and commit all current changes in this worktree with a clear, conventional commit message based on what changed.");
-  $("#ga-push").onclick = () => ask("Push the current branch to its origin remote (set the upstream with -u if it isn't set).");
-  $("#ga-sync").onclick = () => ask("Fetch origin and rebase this branch onto the latest upstream default branch (origin/main, or the repo's actual default). Flag any conflicts you can't safely resolve instead of forcing them.");
-  $("#ga-pr").onclick = () => ask("Create a GitHub pull request for the current branch using the gh CLI, with a concise title and a description summarizing the changes, then give me the PR URL.");
-  $("#ga-merge").onclick = () => ask("Merge the open pull request for this branch with `gh pr merge --squash --delete-branch`, and confirm when it's merged.");
-  $("#git-archive").onclick = () => {
-    if (!activeId) return;
-    const archived = sessions.get(activeId)?.archived;
-    sock.send({ type: archived ? "session.unarchive" : "session.archive", sessionId: activeId });
-  };
-  $("#git-delete").onclick = () => {
-    if (activeId && confirm("Delete this session, its worktree, and branch? This can't be undone.")) {
-      sock.send({ type: "session.kill", sessionId: activeId });
-    }
-  };
-  info("status");
+  $("#ga-commit").onclick = () => askClaude(ASK.commit);
+  $("#ga-push").onclick = () => askClaude(ASK.push);
+  const prBtn = document.getElementById("ga-pr");
+  if (prBtn) {
+    prBtn.onclick = () => {
+      const pr = activeId ? sessions.get(activeId)?.git?.prState : undefined;
+      if (pr === "merged") return;
+      askClaude(pr === "open" ? ASK.mergePr : ASK.createPr);
+    };
+  }
+  $("#ga-cleanup").onclick = cleanupSession;
+  $("#ga-abandon").onclick = abandonSession;
+  info("status"); // refresh status + PR state on open
 }
 function gitStatusLine(s: Session | undefined): string {
   const g = s?.git;
-  return g ? `${esc(g.branch)} · ${g.dirtyFileCount} changed · ${g.ahead}↑ ${g.behind}↓` : "(no git info)";
+  if (!g) return "(no git info)";
+  const pr = g.prState ? ` · PR ${g.prState}` : "";
+  return `${esc(g.branch)} · ${g.dirtyFileCount} changed · ${g.ahead}↑ ${g.behind}↓${pr}`;
 }
 function updateGitPanelMeta(): void {
   if (panelView !== "git") return;
   const s = activeId ? sessions.get(activeId) : undefined;
   const txt = document.getElementById("git-status-text");
   if (txt) txt.innerHTML = gitStatusLine(s);
-  const arch = document.getElementById("git-archive");
-  if (arch) arch.textContent = s?.archived ? "Unarchive" : "Archive";
+  const prBtn = document.getElementById("ga-pr") as HTMLButtonElement | null;
+  if (prBtn) {
+    const pr = s?.git?.prState;
+    prBtn.innerHTML = pr === "open" ? `${icon("merge")} Merge PR` : pr === "merged" ? `${icon("check_circle")} PR merged` : `${icon("rocket_launch")} Create PR`;
+    prBtn.disabled = pr === "merged";
+  }
+}
+/** Outstanding work that removing the session would lose. */
+function outstandingWork(s: Session | undefined): string[] {
+  const g = s?.git;
+  const out: string[] = [];
+  if (!g) return out;
+  if (g.dirtyFileCount > 0) out.push(`${g.dirtyFileCount} uncommitted change${g.dirtyFileCount === 1 ? "" : "s"}`);
+  if (g.ahead > 0) out.push(`${g.ahead} unpushed commit${g.ahead === 1 ? "" : "s"}`);
+  if (g.prState === "open") out.push("an open PR (not merged)");
+  return out;
+}
+function cleanupSession(): void {
+  if (!activeId) return;
+  const s = sessions.get(activeId);
+  const outstanding = outstandingWork(s);
+  if (outstanding.length === 0) {
+    if (confirm("Clean up this session?\n\nRemoves the local + remote branch and the worktree. The work is committed, pushed, and/or merged.")) {
+      sock.send({ type: "session.kill", sessionId: activeId });
+    }
+    return;
+  }
+  showOutstandingDialog(outstanding);
+}
+function abandonSession(): void {
+  if (!activeId) return;
+  const s = sessions.get(activeId);
+  if (confirm(`Abandon “${s?.title ?? "this session"}”?\n\nForce-deletes the local + remote branch and the worktree, discarding ALL uncommitted / unmerged work. This cannot be undone.`)) {
+    sock.send({ type: "session.kill", sessionId: activeId });
+  }
+}
+/** Cleanup found outstanding work — offer to handle it first, or remove anyway. */
+function showOutstandingDialog(outstanding: string[]): void {
+  const s = activeId ? sessions.get(activeId) : undefined;
+  const pr = s?.git?.prState;
+  const root = $("#modal-root");
+  const m = document.createElement("div");
+  m.className = "modal";
+  m.innerHTML = `<div class="modal-box"><h3>${icon("warning")} Outstanding work</h3>
+    <p class="small muted">This session still has work that cleanup would lose:</p>
+    <ul>${outstanding.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>
+    <p class="small muted">Have Claude handle it first:</p>
+    <div class="git-row">
+      <button type="button" id="od-commit">${icon("commit")} Commit</button>
+      <button type="button" id="od-push">${icon("cloud_upload")} Push</button>
+      <button type="button" id="od-pr">${icon(pr === "open" ? "merge" : "rocket_launch")} ${pr === "open" ? "Merge PR" : "Create PR"}</button>
+    </div>
+    <div class="btns"><button type="button" class="danger" id="od-remove">${icon("delete_forever")} Remove anyway</button><span style="flex:1"></span><button type="button" id="od-cancel">Cancel</button></div>
+  </div>`;
+  root.innerHTML = "";
+  root.appendChild(m);
+  const handle = (t: string) => {
+    root.innerHTML = "";
+    askClaude(t);
+  };
+  $<HTMLButtonElement>("#od-commit").onclick = () => handle(ASK.commit);
+  $<HTMLButtonElement>("#od-push").onclick = () => handle(ASK.push);
+  $<HTMLButtonElement>("#od-pr").onclick = () => handle(pr === "open" ? ASK.mergePr : ASK.createPr);
+  $<HTMLButtonElement>("#od-cancel").onclick = () => (root.innerHTML = "");
+  $<HTMLButtonElement>("#od-remove").onclick = () => {
+    if (activeId && confirm("Remove the session, worktree, and branch anyway? Unsaved / unmerged work will be lost.")) {
+      sock.send({ type: "session.kill", sessionId: activeId });
+      root.innerHTML = "";
+    }
+  };
 }
 function setGitOutput(text: string): void {
   const el = document.getElementById("git-output");

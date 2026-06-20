@@ -105,6 +105,9 @@ export interface GitStatus {
   dirtyFileCount: number;
   /** Short diffstat lines, e.g. "src/foo.ts | 12 +++--". */
   diffstat: string[];
+  /** PR state for the branch (populated by an explicit `git status` op via gh; network). */
+  prState?: "open" | "merged" | "closed";
+  prUrl?: string;
 }
 
 export interface Usage {

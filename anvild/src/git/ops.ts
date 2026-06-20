@@ -38,3 +38,21 @@ export function mergePr(cwd: string, method: "merge" | "squash" | "rebase"): { o
   const r = run(["gh", "pr", "merge", flag, "--delete-branch"], cwd);
   return { ok: r.code === 0, output: r.out || "merged" };
 }
+
+/** PR state for the current branch via `gh` (network); undefined if there's no PR. */
+export function prStatus(cwd: string): { state?: "open" | "merged" | "closed"; url?: string } {
+  const r = run(["gh", "pr", "view", "--json", "state,url"], cwd);
+  if (r.code !== 0) return {};
+  try {
+    const j = JSON.parse(r.out) as { state?: string; url?: string };
+    const s = (j.state ?? "").toLowerCase();
+    return { state: s === "open" || s === "merged" || s === "closed" ? s : undefined, url: j.url };
+  } catch {
+    return {};
+  }
+}
+
+/** Best-effort delete of the remote branch (for abandon/cleanup). */
+export function deleteRemoteBranch(cwd: string, branch: string): void {
+  run(["git", "push", "origin", "--delete", branch], cwd);
+}

@@ -230,7 +230,16 @@ export class Supervisor {
     switch (cmd.op) {
       case "status": {
         this.refreshGit(s);
-        output = s.data.git ? `${s.data.git.branch} — ${s.data.git.dirtyFileCount} changed, ${s.data.git.ahead} ahead / ${s.data.git.behind} behind` : "(not a git repo)";
+        if (s.data.git) {
+          const pr = git.prStatus(cwd); // network: gh pr view
+          s.data.git.prState = pr.state;
+          s.data.git.prUrl = pr.url;
+          this.persist();
+          this.broadcastUpdated(s.data);
+          output = `${s.data.git.branch} — ${s.data.git.dirtyFileCount} changed, ${s.data.git.ahead} ahead / ${s.data.git.behind} behind${pr.state ? ` · PR ${pr.state}` : ""}`;
+        } else {
+          output = "(not a git repo)";
+        }
         break;
       }
       case "diff": {
@@ -434,6 +443,7 @@ export class Supervisor {
     this.killTerminal(id);
     await s.stop(); // reap any attached process group (PTY in Phase 3)
     if (s.data.source === "fresh-worktree" && s.data.worktree) {
+      git.deleteRemoteBranch(s.data.cwd, s.data.worktree.branch); // best-effort, before the worktree goes
       removeWorktree(s.data.worktree.repoRoot, s.data.cwd, s.data.worktree.branch);
     }
     rmSync(this.store.sessionDir(id), { recursive: true, force: true });

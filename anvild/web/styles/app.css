@@ -34,6 +34,25 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 
+@font-face {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: 100 700;
+  src: url("/material-symbols.woff2") format("woff2");
+}
+.msym {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-block;
+  vertical-align: middle;
+  letter-spacing: normal;
+  white-space: nowrap;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "liga";
+}
+
 #app { display: flex; height: 100vh; height: 100dvh; }
 
 #sidebar {
@@ -47,32 +66,40 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 .conn.disconnected { color: var(--danger); }
 .budget { font-size: 12px; color: var(--muted); padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .budget.warn { color: var(--warn); border-color: var(--warn); }
-#new-session { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; }
+#new-session { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
+#new-session .msym { font-size: 18px; }
+#theme-toggle { background: none; border: none; cursor: pointer; color: var(--muted); padding: 2px; }
 #session-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .session { padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
 .session:hover { background: var(--bg); }
 .session.active { background: var(--bg); border-color: var(--accent); }
-.session .title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session .meta { font-size: 11px; color: var(--muted); }
+.session .title { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.session .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session .title .msym { font-size: 17px; color: var(--muted); flex-shrink: 0; }
+.session.active .title .msym { color: var(--accent); }
+.session .meta { font-size: 11px; color: var(--muted); padding-left: 23px; }
 
 #main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 #header { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-#header-title { font-weight: 600; }
+#header-title { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+#header-title .msym { font-size: 18px; color: var(--accent); }
 #header-left { display: flex; align-items: center; gap: 10px; }
 #header-actions { display: flex; align-items: center; gap: 8px; }
 #status { font-size: 12px; color: var(--accent); }
 .hbtn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
 .hbtn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-#main-body { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+#main-body { flex: 1; display: flex; min-height: 0; overflow: hidden; position: relative; }
 #convo-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-#side-panel { width: 42%; min-width: 320px; border-left: 1px solid var(--border); display: none; flex-direction: column; min-height: 0; }
-#side-panel.open { display: flex; }
+/* slides over the conversation instead of pushing it */
+#side-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 460px; max-width: 92%; background: var(--bg); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; transform: translateX(100%); transition: transform 0.2s ease; box-shadow: -6px 0 22px rgba(0, 0, 0, 0.18); z-index: 8; }
+#side-panel.open { transform: translateX(0); }
 #panel-tabs { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-.ptab { background: none; border: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; color: var(--muted); font: inherit; }
+.ptab { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; padding: 4px 9px; border-radius: 6px; cursor: pointer; color: var(--muted); font: inherit; }
+.ptab .msym { font-size: 16px; }
 .ptab.active { background: var(--panel); color: var(--text); font-weight: 600; }
 .ptab-spacer { flex: 1; }
-#panel-close { background: none; border: none; cursor: pointer; color: var(--muted); }
+#panel-close { background: none; border: none; cursor: pointer; color: var(--muted); display: inline-flex; }
 #panel-content { flex: 1; overflow: auto; padding: 12px; }
 .file-list { list-style: none; margin: 0; padding: 0; }
 .file-list li { padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
@@ -88,8 +115,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 .git-panel textarea, .git-panel input, .git-panel select { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--bg); color: var(--text); resize: vertical; }
 .git-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .git-row select { width: auto; }
-.git-panel button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
-.git-panel button.mini { padding: 2px 8px; font-size: 11px; }
+.git-panel button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
+.git-panel button .msym { font-size: 18px; }
+.git-panel button:disabled { opacity: 0.5; cursor: default; }
+.git-panel button.mini { padding: 4px 8px; }
 .git-panel button.danger { color: var(--danger); border-color: var(--danger); }
 .git-panel hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }
 .git-output { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; font-size: 11px; background: var(--panel); padding: 8px; border-radius: 8px; max-height: 260px; overflow: auto; margin: 0; }

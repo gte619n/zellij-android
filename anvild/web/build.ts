@@ -33,4 +33,7 @@ cpSync(join(katex, "fonts"), join(dist, "katex/fonts"), { recursive: true });
 // xterm.js stylesheet (terminal)
 cpSync(join(root, "../node_modules/@xterm/xterm/css/xterm.css"), join(dist, "xterm.css"));
 
+// Material Symbols icon font (self-hosted for CSP/offline)
+cpSync(join(root, "../node_modules/material-symbols/material-symbols-rounded.woff2"), join(dist, "material-symbols.woff2"));
+
 console.log(`built web client → ${dist}`);
