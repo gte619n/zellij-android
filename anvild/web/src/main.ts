@@ -359,12 +359,35 @@ $<HTMLFormElement>("#composer").addEventListener("submit", (e) => {
   input.value = "";
   pendingAttachments.length = 0;
   renderAttachRow();
+  autoGrow();
+  updateSendState();
 });
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     $<HTMLFormElement>("#composer").requestSubmit();
   }
+});
+input.addEventListener("input", () => {
+  autoGrow();
+  updateSendState();
+});
+function autoGrow(): void {
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
+}
+function updateSendState(): void {
+  $<HTMLButtonElement>("#send").disabled = !input.value.trim() && pendingAttachments.length === 0;
+}
+
+// attach button → file picker
+const fileInput = $<HTMLInputElement>("#file-input");
+$("#btn-attach").addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  for (const f of Array.from(fileInput.files ?? [])) {
+    if (f.type.startsWith("image/")) void uploadAttachment(f);
+  }
+  fileInput.value = "";
 });
 
 function renderAttachRow(): void {
@@ -379,6 +402,7 @@ function renderAttachRow(): void {
     });
     attachRow.appendChild(chip);
   });
+  updateSendState();
 }
 async function uploadAttachment(file: File): Promise<void> {
   if (!activeId) {
