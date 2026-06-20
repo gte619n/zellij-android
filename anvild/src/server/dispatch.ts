@@ -24,13 +24,8 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Command types in the contract but not built until later milestones. */
-const PENDING: ReadonlySet<string> = new Set([
-  "terminal.open",
-  "terminal.input",
-  "terminal.resize",
-  "terminal.close",
-]);
+/** Command types in the contract but not yet built. */
+const PENDING: ReadonlySet<string> = new Set<string>([]);
 
 /**
  * Routes one inbound client frame (arch §6.1/§6.3): validates the envelope, narrows on
@@ -189,6 +184,20 @@ export function dispatch(conn: ConnState, raw: string, send: Send, deps: Dispatc
       case "fs.unwatch":
         deps.supervisor.fsUnwatch(cmd.sessionId, cmd.path);
         if (cid) send(ack(cid));
+        return;
+
+      case "terminal.open":
+        deps.supervisor.terminalOpen(cmd.sessionId, cmd.cols, cmd.rows);
+        if (cid) send(ack(cid));
+        return;
+      case "terminal.input":
+        deps.supervisor.terminalInput(cmd.sessionId, cmd.data);
+        return;
+      case "terminal.resize":
+        deps.supervisor.terminalResize(cmd.sessionId, cmd.cols, cmd.rows);
+        return;
+      case "terminal.close":
+        if (cid) send(ack(cid)); // PTY persists (arch §7); the client just stops rendering
         return;
 
       default: {

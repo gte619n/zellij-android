@@ -30,4 +30,7 @@ mkdirSync(join(dist, "katex/fonts"), { recursive: true });
 cpSync(join(katex, "katex.min.css"), join(dist, "katex/katex.min.css"));
 cpSync(join(katex, "fonts"), join(dist, "katex/fonts"), { recursive: true });
 
+// xterm.js stylesheet (terminal)
+cpSync(join(root, "../node_modules/@xterm/xterm/css/xterm.css"), join(dist, "xterm.css"));
+
 console.log(`built web client → ${dist}`);

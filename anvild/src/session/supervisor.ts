@@ -212,6 +212,68 @@ export class Supervisor {
     return `/api/sessions/${sessionId}/files?path=${encodeURIComponent(relPath)}`;
   }
 
+  // Terminal channel (arch §7): a persistent PTY per session via Bun.Terminal.
+  private readonly terminals = new Map<string, { pty: any; proc: any; scrollback: Buffer }>();
+
+  terminalOpen(sessionId: string, cols: number, rows: number): void {
+    const s = this.require(sessionId);
+    const existing = this.terminals.get(sessionId);
+    if (existing) {
+      if (existing.scrollback.length) s.emit({ type: "terminal.data", data: existing.scrollback.toString("base64") });
+      try {
+        existing.pty.resize(cols, rows);
+      } catch {
+        /* pty gone */
+      }
+      return;
+    }
+    const rec: { pty: any; proc: any; scrollback: Buffer } = { pty: null, proc: null, scrollback: Buffer.alloc(0) };
+    const BunAny = Bun as any;
+    const term = new BunAny.Terminal({
+      cols,
+      rows,
+      data: (_t: unknown, bytes: Uint8Array) => {
+        const buf = Buffer.from(bytes);
+        rec.scrollback = Buffer.concat([rec.scrollback, buf]);
+        if (rec.scrollback.length > 262144) rec.scrollback = rec.scrollback.subarray(rec.scrollback.length - 262144);
+        s.emit({ type: "terminal.data", data: buf.toString("base64") });
+      },
+    });
+    rec.pty = term;
+    const shell = process.env.SHELL || "/bin/zsh";
+    rec.proc = BunAny.spawn([shell], { terminal: term, cwd: s.data.cwd, env: { ...this.agentEnv, TERM: "xterm-256color" } });
+    this.terminals.set(sessionId, rec);
+    rec.proc.exited.then((code: number | null) => {
+      s.emit({ type: "terminal.exit", code: code ?? 0 });
+      this.terminals.delete(sessionId);
+    });
+  }
+  terminalInput(sessionId: string, dataBase64: string): void {
+    try {
+      this.terminals.get(sessionId)?.pty.write(Buffer.from(dataBase64, "base64"));
+    } catch {
+      /* no pty */
+    }
+  }
+  terminalResize(sessionId: string, cols: number, rows: number): void {
+    try {
+      this.terminals.get(sessionId)?.pty.resize(cols, rows);
+    } catch {
+      /* no pty */
+    }
+  }
+  private killTerminal(sessionId: string): void {
+    const t = this.terminals.get(sessionId);
+    if (t) {
+      try {
+        t.pty.close();
+      } catch {
+        /* already closed */
+      }
+      this.terminals.delete(sessionId);
+    }
+  }
+
   // Attachments (arch §6.5) — uploaded via REST, fed to the agent as image blocks.
   addAttachment(sessionId: string, name: string, mediaType: string, dataBase64: string): AttachmentRef {
     this.require(sessionId);
@@ -278,6 +340,7 @@ export class Supervisor {
     await this.drivers.get(id)?.stop(); // interrupt the agent SDK query + close its input
     this.drivers.delete(id);
     this.clearWatchers(id);
+    this.killTerminal(id);
     await s.stop(); // reap any attached process group (PTY in Phase 3)
     if (s.data.source === "fresh-worktree" && s.data.worktree) {
       removeWorktree(s.data.worktree.repoRoot, s.data.cwd, s.data.worktree.branch);

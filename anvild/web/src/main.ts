@@ -1,5 +1,20 @@
 import MarkdownIt from "markdown-it";
+import { Terminal as XTerm } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
 import { AnvilSocket } from "./ws";
+
+const strToB64 = (s: string): string => {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+};
+const b64ToBytes = (b64: string): Uint8Array => {
+  const bin = atob(b64);
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+};
 import type {
   AttachmentRef,
   Budget,
@@ -146,6 +161,12 @@ function handleSessionEvent(e: ServerEvent): void {
       return;
     case "fs.changed":
       if (panel.classList.contains("open") && e.content.path === readerPath) renderReader(e.content);
+      return;
+    case "terminal.data":
+      xterm?.write(b64ToBytes(e.data));
+      return;
+    case "terminal.exit":
+      xterm?.write(`\r\n\x1b[90m[process exited: ${e.code}]\x1b[0m\r\n`);
       return;
     case "error":
       toast(e.message);
@@ -434,6 +455,9 @@ let panelView: "files" | "reader" | "terminal" | null = null;
 let filesPath = "";
 let readerPath = "";
 let readerWatch = "";
+let xterm: XTerm | null = null;
+let fit: FitAddon | null = null;
+let termObs: ResizeObserver | null = null;
 
 function setPanelTabs(): void {
   document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.classList.toggle("active", t.dataset.view === panelView));
@@ -445,19 +469,54 @@ function openPanel(view: "files" | "reader" | "terminal"): void {
     toast("Open a session first");
     return;
   }
+  if (view !== "terminal") disposeTerminal();
   panelView = view;
   panel.classList.add("open");
   setPanelTabs();
   if (view === "files") requestFiles(filesPath);
   else if (view === "reader" && !readerPath) requestFiles(filesPath);
-  else if (view === "terminal") panelContent.innerHTML = '<p class="muted small">Terminal lands in the next update.</p>';
+  else if (view === "terminal") mountTerminal();
 }
 function closePanel(): void {
   if (readerWatch && activeId) sock.send({ type: "fs.unwatch", sessionId: activeId, path: readerWatch });
   readerWatch = "";
+  disposeTerminal();
   panelView = null;
   panel.classList.remove("open");
   setPanelTabs();
+}
+function mountTerminal(): void {
+  disposeTerminal();
+  panelContent.innerHTML = '<div id="term-host" style="height:100%;width:100%"></div>';
+  const dark = currentTheme() === "dark";
+  xterm = new XTerm({
+    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontSize: 13,
+    cursorBlink: true,
+    theme: dark ? { background: "#1a1b1e", foreground: "#e6e7e9" } : { background: "#ffffff", foreground: "#1c2024" },
+  });
+  fit = new FitAddon();
+  xterm.loadAddon(fit);
+  xterm.open($("#term-host"));
+  fit.fit();
+  xterm.onData((d) => {
+    if (activeId) sock.send({ type: "terminal.input", sessionId: activeId, data: strToB64(d) });
+  });
+  if (activeId) sock.send({ type: "terminal.open", sessionId: activeId, cols: xterm.cols, rows: xterm.rows });
+  termObs = new ResizeObserver(() => {
+    if (fit && xterm && activeId) {
+      fit.fit();
+      sock.send({ type: "terminal.resize", sessionId: activeId, cols: xterm.cols, rows: xterm.rows });
+    }
+  });
+  termObs.observe(panelContent);
+}
+function disposeTerminal(): void {
+  termObs?.disconnect();
+  termObs = null;
+  xterm?.dispose();
+  xterm = null;
+  fit = null;
 }
 function requestFiles(path: string): void {
   if (!activeId) return;

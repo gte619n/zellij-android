@@ -52,11 +52,11 @@ test("unknown command type → command.error, cid echoed", async () => {
   expect(r.message).toContain("unknown command type");
 });
 
-test("recognized-but-unbuilt command → command.error 'pending'", async () => {
+test("terminal.open on an unknown session → command.error", async () => {
   const r = await rpc({ ...base, type: "terminal.open", cid: "c2", sessionId: "x", cols: 80, rows: 24 });
   expect(r.type).toBe("command.error");
   expect(r.cid).toBe("c2");
-  expect(r.message).toContain("not implemented yet");
+  expect(r.message).toContain("no such session");
 });
 
 test("session.create (existing-dir) → session.created with cid", async () => {
