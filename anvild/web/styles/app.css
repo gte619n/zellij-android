@@ -165,8 +165,16 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 .modal-box pre { background: var(--tool-bg); padding: 8px; border-radius: 8px; overflow-x: auto; max-height: 220px; }
 .modal-box label { display: block; margin: 10px 0; font-size: 13px; }
 .modal-box input, .modal-box select { width: 100%; padding: 7px; margin-top: 4px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
-.modal-box .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
-.modal-box .btns button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; }
+.modal-box .btns { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; }
+.modal-box .btns button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
+.modal-box .btns button .msym { font-size: 18px; }
+.modal-box .btns button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.modal-box .btns button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.modal-box h3 .msym { font-size: 20px; vertical-align: -4px; }
+.modal-box ul { margin: 6px 0; padding-left: 20px; font-size: 13px; }
+.modal-box .git-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.modal-box .git-row button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }
+.modal-box .git-row button .msym { font-size: 18px; }
 .modal-box .row { display: flex; gap: 10px; }
 .modal-box .row label { flex: 1; }
 .modal-box .muted { color: var(--muted); }

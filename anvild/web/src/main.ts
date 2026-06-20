@@ -38,7 +38,7 @@ const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "
 const slugify = (s: string): string =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 const icon = (name: string): string => `<span class="msym">${name}</span>`;
-const sessIcon = (s: Session): string => (s.archived ? "inventory_2" : s.source === "fresh-worktree" ? "account_tree" : "folder");
+const sessIcon = (s: Session): string => s.icon ?? (s.source === "fresh-worktree" ? "account_tree" : "folder");
 const conversation = $("#conversation");
 const scrollDown = () => {
   conversation.scrollTop = conversation.scrollHeight;
@@ -781,24 +781,40 @@ function outstandingWork(s: Session | undefined): string[] {
   if (g.prState === "open") out.push("an open PR (not merged)");
   return out;
 }
-function cleanupSession(): void {
+async function cleanupSession(): Promise<void> {
   if (!activeId) return;
-  const s = sessions.get(activeId);
-  const outstanding = outstandingWork(s);
+  const id = activeId;
+  const outstanding = outstandingWork(sessions.get(id));
   if (outstanding.length === 0) {
-    if (confirm("Clean up this session?\n\nRemoves the local + remote branch and the worktree. The work is committed, pushed, and/or merged.")) {
-      sock.send({ type: "session.kill", sessionId: activeId });
-    }
+    const ok = await confirmDialog({
+      icon: "cleaning_services",
+      title: "Clean up this session?",
+      body: "Removes the local + remote branch and the worktree. The work is committed, pushed, and/or merged.",
+      confirmLabel: "Clean up",
+      danger: true,
+    });
+    if (ok) killSession(id);
     return;
   }
   showOutstandingDialog(outstanding);
 }
-function abandonSession(): void {
+async function abandonSession(): Promise<void> {
   if (!activeId) return;
-  const s = sessions.get(activeId);
-  if (confirm(`Abandon “${s?.title ?? "this session"}”?\n\nForce-deletes the local + remote branch and the worktree, discarding ALL uncommitted / unmerged work. This cannot be undone.`)) {
-    sock.send({ type: "session.kill", sessionId: activeId });
-  }
+  const id = activeId;
+  const s = sessions.get(id);
+  const ok = await confirmDialog({
+    icon: "delete_forever",
+    title: `Abandon “${s?.title ?? "this session"}”?`,
+    body: "Force-deletes the local + remote branch and the worktree, discarding ALL uncommitted / unmerged work. This cannot be undone.",
+    confirmLabel: "Abandon",
+    danger: true,
+  });
+  if (ok) killSession(id);
+}
+/** Kill a session and tidy the UI immediately (the session.deleted broadcast also arrives). */
+function killSession(id: string): void {
+  sock.send({ type: "session.kill", sessionId: id });
+  if (panelView) closePanel();
 }
 /** Cleanup found outstanding work — offer to handle it first, or remove anyway. */
 function showOutstandingDialog(outstanding: string[]): void {
@@ -829,10 +845,8 @@ function showOutstandingDialog(outstanding: string[]): void {
   $<HTMLButtonElement>("#od-pr").onclick = () => handle(pr === "open" ? ASK.mergePr : ASK.createPr);
   $<HTMLButtonElement>("#od-cancel").onclick = () => (root.innerHTML = "");
   $<HTMLButtonElement>("#od-remove").onclick = () => {
-    if (activeId && confirm("Remove the session, worktree, and branch anyway? Unsaved / unmerged work will be lost.")) {
-      sock.send({ type: "session.kill", sessionId: activeId });
-      root.innerHTML = "";
-    }
+    root.innerHTML = "";
+    if (activeId) killSession(activeId); // "Remove anyway" — the listed outstanding work IS the warning
   };
 }
 function setGitOutput(text: string): void {
@@ -1024,8 +1038,15 @@ function showEditEnvironment(id: string): void {
     sock.send({ type: "env.update", id, name: $<HTMLInputElement>("#ee-name").value, defaultBase: $<HTMLInputElement>("#ee-base").value });
     showNewSession();
   };
-  $<HTMLButtonElement>("#ee-remove").onclick = () => {
-    if (confirm(`Remove the “${env.name}” environment? (existing sessions are unaffected)`)) {
+  $<HTMLButtonElement>("#ee-remove").onclick = async () => {
+    const ok = await confirmDialog({
+      icon: "delete",
+      title: `Remove “${env.name}”?`,
+      body: "Removes this environment from the list. Existing sessions are unaffected.",
+      confirmLabel: "Remove",
+      danger: true,
+    });
+    if (ok) {
       sock.send({ type: "env.remove", id });
       showNewSession();
     }
@@ -1085,4 +1106,29 @@ function toast(msg: string): void {
   el.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("show"), 4000);
+}
+
+/** Themed replacement for window.confirm — resolves true if confirmed. */
+function confirmDialog(opts: { title: string; body?: string; confirmLabel?: string; danger?: boolean; icon?: string }): Promise<boolean> {
+  return new Promise((resolve) => {
+    const root = $("#modal-root");
+    const m = document.createElement("div");
+    m.className = "modal";
+    m.innerHTML = `<div class="modal-box">
+      <h3>${opts.icon ? icon(opts.icon) + " " : ""}${esc(opts.title)}</h3>
+      ${opts.body ? `<p class="small muted">${esc(opts.body)}</p>` : ""}
+      <div class="btns"><button type="button" id="cd-cancel">Cancel</button><button type="button" id="cd-ok" class="${opts.danger ? "danger" : "primary"}">${esc(opts.confirmLabel ?? "OK")}</button></div>
+    </div>`;
+    root.innerHTML = "";
+    root.appendChild(m);
+    const done = (v: boolean): void => {
+      root.innerHTML = "";
+      resolve(v);
+    };
+    $<HTMLButtonElement>("#cd-ok").onclick = () => done(true);
+    $<HTMLButtonElement>("#cd-cancel").onclick = () => done(false);
+    m.addEventListener("click", (e) => {
+      if (e.target === m) done(false); // click backdrop to cancel
+    });
+  });
 }

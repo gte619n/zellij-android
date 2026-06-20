@@ -35,6 +35,7 @@ import { EnvironmentStore } from "../env/store";
 import { AttachmentStore } from "../attach/store";
 import { listDir, readFile, resolveInside } from "../fs/session-fs";
 import * as git from "../git/ops";
+import { pickIcon } from "../agent/icon";
 
 /** A client command that can't be honored (bad args, no such session). → command.error. */
 export class BadCommand extends Error {}
@@ -168,7 +169,22 @@ export class Supervisor {
     const session = this.wrap(data, 0);
     this.sessions.set(id, session);
     this.persist();
+    void this.assignIcon(session); // async: Sonnet picks an icon from the title (arch §5)
     return session; // dispatch announces session.created (creator gets the cid; others via registry)
+  }
+
+  /** Fire-and-forget: ask Sonnet for a fitting icon, then push it via session.updated. */
+  private async assignIcon(s: Session): Promise<void> {
+    try {
+      const icon = await pickIcon(s.data.title, this.agentEnv);
+      if (icon && this.sessions.has(s.data.id)) {
+        s.data.icon = icon;
+        this.persist();
+        this.broadcastUpdated(s.data);
+      }
+    } catch {
+      /* keep the client's generic fallback icon */
+    }
   }
 
   // File browser & reader (arch §8.1/§8.2), scoped to the session worktree.
