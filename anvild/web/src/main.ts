@@ -670,7 +670,7 @@ async function renderServerCards(): Promise<void> {
         const el = document.getElementById("adb-info");
         if (!el) return;
         const devs = (d.devices ?? "").split("\n").filter((l) => l.trim() && !/list of devices/i.test(l));
-        el.innerHTML = `Mac IP: <code>${esc((d.serverIps ?? []).join(", ") || "?")}</code> — the phone must be on the same network.<br/>adb devices: <code>${esc(devs.length ? devs.join("; ") : "none connected")}</code>`;
+        el.innerHTML = `Mac IP: <code>${esc((d.serverIps ?? []).join(", ") || "?")}</code> — uses Tailscale when both are on your tailnet (works across networks); else same LAN.<br/>adb devices: <code>${esc(devs.length ? devs.join("; ") : "none connected")}</code>`;
       })
       .catch(() => {});
   }

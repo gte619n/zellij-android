@@ -183,19 +183,37 @@ class MainActivity : ComponentActivity() {
         when (json?.optString("type")) {
             "adb.connect" -> adbWifi.discover(
                 AdbWifi.CONNECT,
-                onResult = { host, port -> postAdb("/api/adb/connect", JSONObject().put("host", host).put("port", port), reply, "connect", host, port) },
+                onResult = { lanHost, port ->
+                    val host = tailscaleIp() ?: lanHost // prefer the tailnet IP (LAN subnets often differ)
+                    postAdb("/api/adb/connect", JSONObject().put("host", host).put("port", port), reply, "connect", host, port)
+                },
                 onError = { msg -> replyBridge(reply, false, msg, "connect") },
             )
             "adb.pair" -> {
                 val code = json.optString("code")
                 adbWifi.discover(
                     AdbWifi.PAIRING,
-                    onResult = { host, port -> postAdb("/api/adb/pair", JSONObject().put("host", host).put("port", port).put("code", code), reply, "pair", host, port) },
+                    onResult = { lanHost, port ->
+                        val host = tailscaleIp() ?: lanHost
+                        postAdb("/api/adb/pair", JSONObject().put("host", host).put("port", port).put("code", code), reply, "pair", host, port)
+                    },
                     onError = { msg -> replyBridge(reply, false, msg, "pair") },
                 )
             }
             else -> replyBridge(reply, false, "Unknown native command", "")
         }
+    }
+
+    /** This device's Tailscale IPv4 (CGNAT 100.64.0.0/10), if Tailscale is up — reachable from the
+     *  Mac across subnets, unlike the phone's LAN IP. */
+    private fun tailscaleIp(): String? = try {
+        java.net.NetworkInterface.getNetworkInterfaces().asSequence()
+            .flatMap { it.inetAddresses.asSequence() }
+            .filterIsInstance<java.net.Inet4Address>()
+            .firstOrNull { val b = it.address; (b[0].toInt() and 0xFF) == 100 && (b[1].toInt() and 0xFF) in 64..127 }
+            ?.hostAddress
+    } catch (_: Exception) {
+        null
     }
 
     private fun postAdb(path: String, body: JSONObject, reply: JavaScriptReplyProxy, stage: String, host: String, port: Int) {
