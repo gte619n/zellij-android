@@ -266,7 +266,8 @@ export function createServer(opts: ServerOptions): ServerHandle {
         return new Response("expected a websocket upgrade", { status: 426 });
       }
 
-      // worktree files (arch §8.1): serve a binary/image file from the session worktree
+      // worktree files (arch §8.1): serve a binary/image file from the session worktree.
+      // `download=1` forces a save-as via Content-Disposition (used by file-offer download cards, §8).
       const fileMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/files$/);
       if (fileMatch && req.method === "GET") {
         const sessionId = fileMatch[1]!;
@@ -275,7 +276,12 @@ export function createServer(opts: ServerOptions): ServerHandle {
           const abs = supervisor.fsResolve(sessionId, path);
           const file = Bun.file(abs);
           if (!(await file.exists())) return new Response("not found", { status: 404 });
-          return new Response(file);
+          const headers: Record<string, string> = {};
+          if (url.searchParams.get("download")) {
+            const name = (abs.split("/").pop() || "download").replace(/["\\]/g, "_");
+            headers["Content-Disposition"] = `attachment; filename="${name}"`;
+          }
+          return new Response(file, { headers });
         } catch {
           return new Response("forbidden", { status: 403 });
         }

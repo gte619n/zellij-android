@@ -75,16 +75,19 @@ export class EventLog {
       const a = e as any;
       switch (e.type) {
         case "message.user":
-          events.push({ kind: "user", rendered: a.rendered, attachments: a.attachments ?? [] });
+          events.push({ kind: "user", ts: a.ts, rendered: a.rendered, attachments: a.attachments ?? [] });
           break;
         case "assistant.message":
-          events.push({ kind: "assistant", blocks: a.blocks });
+          events.push({ kind: "assistant", ts: a.ts, blocks: a.blocks });
           break;
         case "tool.result":
-          events.push({ kind: "tool_result", toolUseId: a.toolUseId, content: a.content, isError: a.isError });
+          events.push({ kind: "tool_result", ts: a.ts, toolUseId: a.toolUseId, content: a.content, isError: a.isError });
           break;
         case "result":
-          events.push({ kind: "result", stopReason: a.stopReason, usage: a.usage });
+          events.push({ kind: "result", ts: a.ts, stopReason: a.stopReason, usage: a.usage });
+          break;
+        case "file.offer":
+          events.push({ kind: "file_offer", ts: a.ts, file: a.file });
           break;
         default:
           break; // status / usage / tool.use / permission.request / error are not part of the snapshot
