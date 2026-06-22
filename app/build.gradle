@@ -15,7 +15,7 @@ if (localPropertiesFile.exists()) {
 // Single source of truth for the user-visible app version. Bump this (and versionCode below)
 // for meaningful releases; it's both the APK versionName and the version shown next to the Anvil
 // brand in the bundled web UI (passed to the web build as APP_VERSION).
-def baseVersionName = "2.0.2"
+def baseVersionName = "2.0.3"
 
 // CI (GitHub Actions, .github/workflows/android-release.yml) sets ANVIL_BUILD_NUMBER to the
 // workflow run number on every push to `main`. When present it makes each automated build
@@ -24,7 +24,7 @@ def baseVersionName = "2.0.2"
 // very latest build straight from the brand label. Local builds keep the plain version above.
 def ciBuildNumber = System.getenv("ANVIL_BUILD_NUMBER")
 def appVersionName = ciBuildNumber ? "${baseVersionName} (build ${ciBuildNumber})" : baseVersionName
-def computedVersionCode = ciBuildNumber ? (100 + ciBuildNumber.toInteger()) : 7
+def computedVersionCode = ciBuildNumber ? (100 + ciBuildNumber.toInteger()) : 8
 
 android {
     namespace 'com.gte619n.anvil'
@@ -77,6 +77,7 @@ tasks.register("bundleWebAssets", Exec) {
     commandLine "bash", "-lc", "bun run build:web && bun run web/bundle-native.ts '${out}'"
     inputs.dir("${anvild}/web/src")
     inputs.file("${anvild}/web/index.html")
+    inputs.file("${anvild}/web/sw.js") // re-bundle when the service worker changes
     inputs.property("appVersion", appVersionName) // re-bundle when the version changes
     outputs.dir(out)
 }
@@ -101,7 +102,7 @@ firebaseAppDistribution {
     if (generatedNotes.exists()) {
         releaseNotesFile = generatedNotes.path
     } else {
-        releaseNotes = "v${appVersionName} — Back button now closes the open dialog/menu/settings/panel and returns to the previous screen instead of exiting the app. Also: image attachments wait for in-flight uploads (no more silently dropped images) + clearer feedback for non-image files."
+        releaseNotes = "v${appVersionName} — Reminders are now per-session: a new alert for a session replaces the old one (no more three stacked reminders), shows which session and what it's asking for (e.g. the command or file), and clears automatically when you tap in to that session."
     }
 }
 
