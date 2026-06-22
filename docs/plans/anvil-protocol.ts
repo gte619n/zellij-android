@@ -181,18 +181,36 @@ export type ContentBlock =
   | { kind: "markdown"; rendered: RenderedMarkdown }
   | { kind: "tool_use"; toolUseId: ToolUseId; name: string; input: unknown };
 
-/** One conversation log entry — what `conversation.snapshot` replays (§6.4). */
+/** One conversation log entry — what `conversation.snapshot` replays (§6.4).
+ *  `ts` is the wall-clock time the entry was first emitted, carried through so a replayed
+ *  conversation shows the same timestamps as the live stream. */
 export type ConversationEvent =
-  | { kind: "user"; rendered: RenderedMarkdown; attachments: AttachmentRef[] }
-  | { kind: "assistant"; blocks: ContentBlock[] }
-  | { kind: "tool_result"; toolUseId: ToolUseId; content: string; isError: boolean }
-  | { kind: "result"; stopReason: string; usage: Usage };
+  | { kind: "user"; ts?: Iso8601; rendered: RenderedMarkdown; attachments: AttachmentRef[] }
+  | { kind: "assistant"; ts?: Iso8601; blocks: ContentBlock[] }
+  | { kind: "tool_result"; ts?: Iso8601; toolUseId: ToolUseId; content: string; isError: boolean }
+  | { kind: "result"; ts?: Iso8601; stopReason: string; usage: Usage }
+  | { kind: "file_offer"; ts?: Iso8601; file: FileOffer };
 
 export interface AttachmentRef {
   id: AttachmentId;
   kind: "image" | "file";
   name: string;
   path: string; // server-side path under <cwd>/.anvil/attachments/
+}
+
+/**
+ * A deliverable file the agent produced in its worktree (a report, export, archive, image…),
+ * surfaced in the conversation as a download card "from the model" (§8). `downloadUrl` is a
+ * daemon-relative REST path; clients resolve it to absolute. `taildropped` is true when the
+ * daemon also pushed the file to the user's device via `tailscale file cp` (best-effort).
+ */
+export interface FileOffer {
+  name: string; // base name, e.g. "report.pdf"
+  path: string; // absolute path inside the session worktree
+  size: number; // bytes
+  mime: string;
+  downloadUrl: string; // e.g. "/api/sessions/<id>/download?path=<rel>"
+  taildropped?: boolean; // pushed to the device via Taildrop
 }
 
 /** A passage the user selected in the reader and is citing into a prompt (§8.2). */
@@ -379,6 +397,11 @@ export interface SessionErrorEvent extends Envelope, SessionScoped {
   message: string;
   fatal: boolean;
 }
+/** A deliverable file the agent produced — rendered as a download card in the conversation (§8). */
+export interface FileOfferEvent extends Envelope, SessionScoped {
+  type: "file.offer";
+  file: FileOffer;
+}
 
 // 4c. Files (§8.1/§8.2)
 
@@ -451,6 +474,7 @@ export type ServerEvent =
   | UsageEvent
   | ResultEvent
   | SessionErrorEvent
+  | FileOfferEvent
   // files
   | FsListResultEvent
   | FsReadResultEvent

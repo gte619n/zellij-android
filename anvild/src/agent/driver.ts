@@ -2,6 +2,7 @@ import { query, type Query } from "@anthropic-ai/claude-agent-sdk";
 import type { Model } from "@protocol";
 import { InputQueue, userMessage, type InlineImage } from "./input-queue";
 import { askUserQuestionToolIds, extractResultUsage, extractSessionId, mapMessage } from "./map";
+import { buildFileOffer, deliverablePath, maybeTaildrop } from "./file-offer";
 import { makePreToolUseHook, type PermissionBroker } from "./permissions";
 import { ASK_USER_QUESTION_DIALOG, makeUserDialogHandler, type QuestionBroker } from "./questions";
 import type { Session } from "../session/session";
@@ -29,6 +30,10 @@ export class AgentDriver {
 
   /** tool_use ids of in-flight AskUserQuestions — their tool.result (answers echo) is dropped. */
   private readonly askQuestionIds = new Set<string>();
+
+  /** Deliverable files written this turn (toolUseId → worktree path), realized into a download
+   *  card once the write's tool.result confirms success (UI refinement §8). */
+  private readonly pendingOffers = new Map<string, string>();
 
   constructor(
     private readonly session: Session,
@@ -68,26 +73,36 @@ export class AgentDriver {
   }
 
   /**
+   * Tooling guidance applied to every session: don't pester the user about whether ordinary CLI
+   * tools exist — assume they're installed and probe the environment (PATH, `command -v`, package
+   * manifests) to find or invoke them. Only surface a question when something genuinely has to be
+   * downloaded/installed first, or truly can't be found after looking. (UI refinement §tools)
+   */
+  private static readonly TOOLING_GUIDANCE =
+    `\n\nTOOLING: Assume the command-line tools you need are already installed and discover them in the ` +
+    `environment (check PATH with \`command -v\`/\`which\`, look at the project's package manifests / lockfiles, ` +
+    `try the obvious invocation) before concluding a tool is missing. Do NOT stop to ask the user whether a ` +
+    `common tool is available — just look. Only ask the user when a tool genuinely needs to be installed or ` +
+    `downloaded first, or when it truly cannot be found after searching.`;
+
+  /**
    * Keep Claude Code's default system prompt, but for worktree sessions pin it to the worktree
    * so it doesn't wander into the original checkout it can discover via `git worktree list`/docs
    * (which breaks isolation and the sandboxed reader). (arch §5)
    */
   private systemPrompt(): { type: "preset"; preset: "claude_code"; append?: string } {
     const s = this.session.data;
+    let append = AgentDriver.TOOLING_GUIDANCE;
     if (s.source === "fresh-worktree") {
       const where = s.worktree ? ` (branch "${s.worktree.branch}", based on "${s.worktree.base}")` : "";
-      return {
-        type: "preset",
-        preset: "claude_code",
-        append:
-          `\n\nWORKING DIRECTORY: You are operating inside an isolated git worktree at "${s.cwd}"${where}. ` +
-          `This worktree is your ONLY workspace and already contains the full checkout. Always read, search, and edit files ` +
-          `within this directory (use relative paths, or absolute paths under it). NEVER read from or write to the original ` +
-          `repository checkout or any absolute path outside this worktree — even if you discover its location via ` +
-          "`git worktree list`, git metadata, or documentation. All work for this task must stay in this worktree so it can be reviewed as a branch.",
-      };
+      append +=
+        `\n\nWORKING DIRECTORY: You are operating inside an isolated git worktree at "${s.cwd}"${where}. ` +
+        `This worktree is your ONLY workspace and already contains the full checkout. Always read, search, and edit files ` +
+        `within this directory (use relative paths, or absolute paths under it). NEVER read from or write to the original ` +
+        `repository checkout or any absolute path outside this worktree — even if you discover its location via ` +
+        "`git worktree list`, git metadata, or documentation. All work for this task must stay in this worktree so it can be reviewed as a branch.";
     }
-    return { type: "preset", preset: "claude_code" };
+    return { type: "preset", preset: "claude_code", append };
   }
 
   private ensureStarted(): void {
@@ -125,6 +140,19 @@ export class AgentDriver {
     void this.consume();
   }
 
+  /** Realize a deliverable write into a download card (and Taildrop it if configured). */
+  private async offerFile(rawPath: string): Promise<void> {
+    const s = this.session;
+    const offer = buildFileOffer(s.id, s.data.cwd, rawPath);
+    if (!offer) return;
+    try {
+      offer.taildropped = await maybeTaildrop(offer.path);
+    } catch {
+      /* Taildrop is best-effort — the in-chat download card is the reliable path */
+    }
+    s.emit({ type: "file.offer", file: offer });
+  }
+
   private async consume(): Promise<void> {
     if (!this.q) return;
     try {
@@ -140,9 +168,19 @@ export class AgentDriver {
           // Drop the AskUserQuestion tool.result (the answers echo) — the question card already
           // shows the user's choice; the raw result would just re-dump the answers as JSON.
           if (body.type === "tool.result" && this.askQuestionIds.delete(body.toolUseId)) continue;
-          if (body.type === "tool.use") sawToolUse = true;
+          if (body.type === "tool.use") {
+            sawToolUse = true;
+            const p = deliverablePath(body.name, body.input);
+            if (p) this.pendingOffers.set(body.toolUseId, p);
+          }
           if (body.type === "tool.result") sawToolResult = true;
           this.session.emit(body);
+          // A successful write of a deliverable file → surface it as a download card.
+          if (body.type === "tool.result" && this.pendingOffers.has(body.toolUseId)) {
+            const path = this.pendingOffers.get(body.toolUseId)!;
+            this.pendingOffers.delete(body.toolUseId);
+            if (!body.isError) void this.offerFile(path);
+          }
         }
         if (sawToolUse) this.session.setStatus("running_tool");
         if (sawToolResult) this.session.setStatus("thinking");

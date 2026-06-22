@@ -25,6 +25,7 @@ import type {
   DirsListResultEvent,
   Environment,
   FileContent,
+  FileOffer,
   GitResultEvent,
   GitStatus,
   PermissionSuggestion,
@@ -541,16 +542,19 @@ function handleSessionEvent(e: ServerEvent): void {
       saveConvoCache();
       return;
     case "message.user":
-      appendUser(e.rendered.html, e.attachments);
+      appendUser(e.rendered.html, e.attachments, e.ts);
       return;
     case "assistant.delta":
       appendDelta(e.text);
       return;
     case "assistant.message":
-      commitAssistant(e.blocks);
+      commitAssistant(e.blocks, e.ts);
       return;
     case "tool.result":
       appendToolResult(e.content, e.isError);
+      return;
+    case "file.offer":
+      appendFileOffer(e.file);
       return;
     case "status":
       setStatus(e.status);
@@ -558,6 +562,7 @@ function handleSessionEvent(e: ServerEvent): void {
     case "result":
       setStatus("idle");
       streaming = null;
+      finalizeActivity(); // stop the activity spinner now the turn is done
       saveConvoCache();
       if (panelView === "git" && e.sessionId === activeId) requestGitStatus(); // refresh the SCM buttons
       return;
@@ -593,9 +598,10 @@ conversation.addEventListener("click", (e) => {
 
 // replay/snapshot events fold into the same renderers
 function renderConversationEvent(ev: ConversationEvent): void {
-  if (ev.kind === "user") appendUser(ev.rendered.html, ev.attachments);
-  else if (ev.kind === "assistant") commitAssistant(ev.blocks);
+  if (ev.kind === "user") appendUser(ev.rendered.html, ev.attachments, ev.ts);
+  else if (ev.kind === "assistant") commitAssistant(ev.blocks, ev.ts);
   else if (ev.kind === "tool_result") appendToolResult(ev.content, ev.isError);
+  else if (ev.kind === "file_offer") appendFileOffer(ev.file);
 }
 
 // ── Conversation rendering ─────────────────────────────────────────────────────
@@ -606,7 +612,21 @@ function bubble(role: string): HTMLElement {
   scrollDown();
   return el;
 }
-function appendUser(html: string, attachments: AttachmentRef[] = []): void {
+// ── Timestamps ─────────────────────────────────────────────────────────────────
+/** A small, muted time label for a message (short text; full date/time on hover). */
+function timeEl(ts?: string): HTMLElement | null {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const el = document.createElement("div");
+  el.className = "msg-time";
+  el.textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  el.title = d.toLocaleString();
+  return el;
+}
+
+function appendUser(html: string, attachments: AttachmentRef[] = [], ts?: string): void {
+  resetActivity(); // a new user turn closes off the previous turn's activity block
   const b = bubble("user");
   const md = document.createElement("div");
   md.className = "md";
@@ -620,12 +640,16 @@ function appendUser(html: string, attachments: AttachmentRef[] = []): void {
       b.appendChild(img);
     }
   }
+  const t = timeEl(ts);
+  if (t) b.appendChild(t);
+  collectReferences(html); // surface any links/addresses the user pasted
   scrollDown();
   saveConvoCache();
 }
 /** Optimistically render a queued (offline) user message; the authoritative copy replaces it
  *  when the outbox flushes and the session re-snapshots. */
 function appendOptimisticUser(text: string): void {
+  resetActivity();
   const b = bubble("user");
   b.classList.add("queued");
   const md = document.createElement("div");
@@ -636,6 +660,8 @@ function appendOptimisticUser(text: string): void {
   badge.className = "queued-badge";
   badge.innerHTML = `${icon("schedule")} queued`;
   b.appendChild(badge);
+  const t = timeEl(new Date().toISOString());
+  if (t) b.appendChild(t);
   scrollDown();
   saveConvoCache();
 }
@@ -672,6 +698,7 @@ function renderStream(): void {
 let thinkingEl: HTMLElement | null = null;
 const THINK_LABEL: Record<string, string> = { thinking: "Thinking", running_tool: "Working", running: "Working" };
 function showThinking(status: string): void {
+  if (activityLive) return; // the live activity block already shows running state
   if (!thinkingEl) {
     thinkingEl = document.createElement("div");
     thinkingEl.className = "thinking";
@@ -686,20 +713,35 @@ function hideThinking(): void {
   thinkingEl?.remove();
   thinkingEl = null;
 }
-function commitAssistant(blocks: ContentBlock[]): void {
+function commitAssistant(blocks: ContentBlock[], ts?: string): void {
   if (streamRaf) {
     cancelAnimationFrame(streamRaf);
     streamRaf = 0;
   }
-  const b = streaming ?? bubble("assistant");
-  b.innerHTML = "";
-  const md = document.createElement("div");
-  md.className = "md";
-  md.innerHTML = blocks.map((blk) => (blk.kind === "markdown" ? blk.rendered.html : toolHtml(blk))).join("");
-  b.appendChild(md);
-  void runMermaid(md);
+  const mdBlocks = blocks.filter((b): b is Extract<ContentBlock, { kind: "markdown" }> => b.kind === "markdown");
+  const toolBlocks = blocks.filter((b): b is Extract<ContentBlock, { kind: "tool_use" }> => b.kind === "tool_use");
+
+  if (mdBlocks.length) {
+    // The model's prose answer is its own clean bubble (separate from the tool churn below).
+    const b = streaming ?? bubble("assistant");
+    b.innerHTML = "";
+    const md = document.createElement("div");
+    md.className = "md";
+    md.innerHTML = mdBlocks.map((blk) => blk.rendered.html).join("");
+    b.appendChild(md);
+    const t = timeEl(ts);
+    if (t) b.appendChild(t);
+    addCopyButtons(md);
+    collectReferences(md.innerHTML);
+    void runMermaid(md);
+  } else if (streaming) {
+    // A tool-only turn: drop the empty streaming draft bubble so it isn't left blank.
+    streaming.remove();
+  }
   streaming = null;
   streamText = "";
+  // Tool calls fold into the consolidated activity block, not inline in the prose.
+  for (const b of toolBlocks) appendActivityStep(toolHtml(b));
   scrollDown();
 }
 const FILE_TOOLS = new Set(["Read", "Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -722,28 +764,214 @@ function toolHtml(b: Extract<ContentBlock, { kind: "tool_use" }>): string {
   }
   return `<div class="tool">${icon("build")} <b>${esc(b.name)}</b> <code>${esc(JSON.stringify(b.input)).slice(0, 160)}</code></div>`;
 }
+
+// ── Consolidated activity block (§5) ─────────────────────────────────────────────
+// All the tool/thinking churn for one turn collapses into a single block that previews the
+// last few lines and expands on click — so the conversation reads as "what I said" / "what the
+// model said" without every Read/Bash/result on its own line. Reset at each new user turn.
+let activityEl: HTMLDetailsElement | null = null;
+let activityCount = 0;
+let activityLive = false;
+const activityTail: string[] = [];
+const ACTIVITY_TAIL = 5;
+
+function resetActivity(): void {
+  activityEl = null;
+  activityCount = 0;
+  activityLive = false;
+  activityTail.length = 0;
+}
+function ensureActivity(): HTMLDetailsElement {
+  if (activityEl && activityEl.isConnected) return activityEl;
+  const d = document.createElement("details");
+  d.className = "activity live";
+  d.innerHTML =
+    `<summary><span class="activity-row"><span class="activity-ind"><i></i><i></i><i></i></span>` +
+    `<span class="activity-title">Working</span><span class="activity-count"></span>` +
+    `<span class="msym activity-chevron">expand_more</span></span>` +
+    `<div class="activity-tail"></div></summary><div class="activity-full"></div>`;
+  conversation.appendChild(d);
+  activityEl = d;
+  activityLive = true;
+  activityTail.length = 0;
+  activityCount = 0;
+  hideThinking(); // the activity block's spinner is now the running indicator
+  return d;
+}
+function updateActivityHead(): void {
+  if (!activityEl) return;
+  const title = activityEl.querySelector(".activity-title");
+  if (title) title.textContent = activityLive ? "Working" : "Worked";
+  const count = activityEl.querySelector(".activity-count");
+  if (count) count.textContent = activityCount ? `· ${activityCount} step${activityCount === 1 ? "" : "s"}` : "";
+}
+/** Append one step to the current activity block. `preview` is a single-line form shown in the
+ *  collapsed tail; `full` (defaults to preview) is the rich form shown when expanded. */
+function appendActivityStep(preview: string, full = preview): void {
+  const d = ensureActivity();
+  activityCount++;
+  activityTail.push(preview);
+  if (activityTail.length > ACTIVITY_TAIL) activityTail.shift();
+  const tail = d.querySelector(".activity-tail");
+  if (tail) tail.innerHTML = activityTail.join("");
+  const body = d.querySelector<HTMLElement>(".activity-full");
+  if (body) {
+    body.insertAdjacentHTML("beforeend", full);
+    const last = body.lastElementChild as HTMLElement | null;
+    if (last) addCopyButtons(last);
+  }
+  updateActivityHead();
+  scrollDown();
+}
+/** Mark the current activity block finished (turn ended): stop the spinner, relabel. */
+function finalizeActivity(): void {
+  if (!activityEl) return;
+  activityLive = false;
+  activityEl.classList.remove("live");
+  const ind = activityEl.querySelector(".activity-ind");
+  if (ind) ind.innerHTML = icon("check");
+  updateActivityHead();
+}
 function appendToolResult(content: string, isError: boolean): void {
   const text = content.trim();
   const lineCount = text ? text.split("\n").length : 0;
   const first = text.split("\n").find((l) => l.trim()) ?? "(no output)";
-  const el = document.createElement("details");
-  el.className = `bubble tool-result ${isError ? "error" : ""}`;
-  el.innerHTML =
-    `<summary>${icon(isError ? "error" : "check")} ${isError ? "error" : "result"} · ${lineCount} line${lineCount === 1 ? "" : "s"} · ${esc(first.slice(0, 80))}</summary>` +
-    `<pre>${esc(text.slice(0, 8000))}${text.length > 8000 ? "\n… (truncated)" : ""}</pre>`;
-  conversation.appendChild(el);
+  const summary = `${icon(isError ? "error" : "check")} ${isError ? "error" : "result"} · ${lineCount} line${lineCount === 1 ? "" : "s"} · ${esc(first.slice(0, 80))}`;
+  const preview = `<div class="tool ${isError ? "result-error" : ""}">${summary}</div>`;
+  const full =
+    `<details class="tool-result ${isError ? "error" : ""}">` +
+    `<summary>${summary}</summary>` +
+    `<pre>${esc(text.slice(0, 8000))}${text.length > 8000 ? "\n… (truncated)" : ""}</pre></details>`;
+  appendActivityStep(preview, full);
+}
+
+// ── Links panel (§links) ────────────────────────────────────────────────────────
+// As links and addresses (running servers, URLs) stream by, collect them so they're reachable
+// from the side panel's "Links" tab without scrolling the conversation back. A count badge on
+// the header Links button surfaces new references while the panel is closed.
+const references = new Map<string, string>(); // url → display label, insertion-ordered
+const REF_LIMIT = 50;
+
+/** Pull http(s) URLs and bare host:port addresses out of a chunk of (rendered) text/HTML. */
+function extractRefs(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi)) {
+    out.push(m[0].replace(/[.,;:!?)\]}'"]+$/, ""));
+  }
+  for (const m of text.matchAll(/\b(?:localhost|(?:\d{1,3}\.){3}\d{1,3}):\d{2,5}\b/gi)) {
+    out.push(`http://${m[0]}`); // bare address → make it openable
+  }
+  return out;
+}
+function collectReferences(text: string): void {
+  let added = false;
+  for (const url of extractRefs(text)) {
+    if (references.has(url)) continue;
+    references.set(url, url.replace(/^https?:\/\//, ""));
+    added = true;
+    // keep only the most recent REF_LIMIT
+    if (references.size > REF_LIMIT) references.delete(references.keys().next().value as string);
+  }
+  if (added) {
+    updateLinksBadge();
+    if (panelView === "links") renderLinks();
+  }
+}
+function clearReferences(): void {
+  references.clear();
+  updateLinksBadge();
+  if (panelView === "links") renderLinks();
+}
+/** Reflect the reference count on the header Links button (visible while the panel is closed). */
+function updateLinksBadge(): void {
+  const btn = document.getElementById("btn-links");
+  if (!btn) return;
+  const n = references.size;
+  btn.classList.toggle("has-links", n > 0);
+  btn.dataset.count = n > 99 ? "99+" : String(n);
+  btn.title = n > 0 ? `Links (${n})` : "Links";
+}
+function renderLinks(): void {
+  panelView = "links";
+  setPanelTabs();
+  if (references.size === 0) {
+    panelContent.innerHTML =
+      `<p class="muted small links-empty">No links yet. URLs and server addresses (e.g. <code>http://localhost:3000</code>) Claude mentions show up here.</p>`;
+    return;
+  }
+  const rows = [...references.entries()]
+    .reverse() // most-recent first
+    .map(
+      ([url, label]) =>
+        `<li class="link-row"><a href="${esc(url)}" target="_blank" rel="noopener" title="${esc(url)}">${icon("open_in_new")}<span class="link-label">${esc(label)}</span></a>` +
+        `<button type="button" class="ref-copy" data-url="${esc(url)}" title="Copy">${icon("content_copy")}</button></li>`,
+    )
+    .join("");
+  panelContent.innerHTML = `<ul class="link-list">${rows}</ul>`;
+  panelContent.querySelectorAll<HTMLElement>(".ref-copy").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.preventDefault();
+      const url = b.dataset.url ?? "";
+      void copyText(url).then((ok) => {
+        b.innerHTML = icon(ok ? "check" : "error");
+        setTimeout(() => (b.innerHTML = icon("content_copy")), 1400);
+      });
+    }),
+  );
+}
+
+// ── File-offer card (§download) ────────────────────────────────────────────────────
+// A deliverable file the model produced, shown as an attachment-style card "from the model",
+// with a one-tap download (served by the daemon) and a note when it was also pushed via Taildrop.
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = bytes / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}
+function fileOfferIcon(mime: string): string {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "movie";
+  if (mime.startsWith("audio/")) return "audio_file";
+  if (mime === "application/pdf") return "picture_as_pdf";
+  if (/zip|tar|gzip|compressed|x-7z|rar/.test(mime)) return "folder_zip";
+  if (/spreadsheet|csv|excel/.test(mime)) return "table_chart";
+  return "description";
+}
+function appendFileOffer(file: FileOffer): void {
+  const b = bubble("assistant");
+  b.className = "bubble assistant file-offer";
+  const href = apiUrl(file.downloadUrl);
+  const taildrop = file.taildropped ? `<span class="fo-taildrop">${icon("send_to_mobile")} Sent to your device</span>` : "";
+  b.innerHTML =
+    `<div class="fo-card">` +
+    `<span class="fo-icon">${icon(fileOfferIcon(file.mime))}</span>` +
+    `<span class="fo-meta"><span class="fo-name" title="${esc(file.name)}">${esc(file.name)}</span>` +
+    `<span class="fo-sub">${esc(humanSize(file.size))}${taildrop}</span></span>` +
+    `<a class="fo-dl" href="${esc(href)}" download="${esc(file.name)}" title="Download">${icon("download")}</a>` +
+    `</div>`;
   scrollDown();
+  saveConvoCache();
 }
 function clearConversation(): void {
   conversation.innerHTML = "";
   streaming = null;
   thinkingEl = null; // detached by the innerHTML reset
+  resetActivity(); // detached by the reset
+  clearReferences();
   permCards.clear(); // cards are detached by the reset; the re-surfaced request re-adds them
   questionCards.clear();
 }
 function renderEmptyState(): void {
   streaming = null;
   thinkingEl = null;
+  resetActivity();
+  clearReferences();
   // inlined (not a top-level const) so it's safe to call during early module init
   conversation.innerHTML =
     `<div class="empty-state"><img src="/anvil.svg" class="empty-art" alt="Anvil" width="132" height="132" /><p>Select a session, or create a new one.</p></div>`;
@@ -769,6 +997,58 @@ function setStatus(status: string): void {
   if (s) {
     s.status = status as Session["status"];
     renderSessions();
+  }
+}
+
+// ── Copy-to-clipboard ─────────────────────────────────────────────────────────────
+/** Copy `text` to the clipboard (with a legacy fallback for non-secure contexts). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+/** Add a one-click copy button to every code block under `root` (commands, snippets, output). */
+function addCopyButtons(root: HTMLElement): void {
+  for (const pre of root.querySelectorAll<HTMLElement>("pre")) {
+    if (pre.querySelector(".copy-btn") || pre.classList.contains("mermaid")) continue;
+    const code = pre.textContent ?? "";
+    if (!code.trim()) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "copy-btn";
+    btn.title = "Copy";
+    btn.innerHTML = icon("content_copy");
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void copyText(code).then((ok) => {
+        btn.innerHTML = icon(ok ? "check" : "error");
+        btn.classList.toggle("copied", ok);
+        setTimeout(() => {
+          btn.innerHTML = icon("content_copy");
+          btn.classList.remove("copied");
+        }, 1400);
+      });
+    });
+    pre.appendChild(btn);
   }
 }
 
@@ -977,7 +1257,10 @@ async function toggleReadme(id: string): Promise<void> {
   }
 }
 function renderBudget(b: Budget): void {
-  const el = $("#budget");
+  // The sidebar usage meter is hidden for now (UI refinement) — keep the handler a safe no-op
+  // when the element is absent so the budget event still flows to the Settings server card.
+  const el = document.getElementById("budget");
+  if (!el) return;
   el.classList.toggle("warn", b.warn);
   el.textContent = budgetText(b);
   el.title = b.available && b.subscriptionType ? `${b.subscriptionType} plan usage` : "";
@@ -1209,7 +1492,7 @@ quoteBtn.addEventListener("mousedown", (e) => {
 // ── Side panel: files + reader (terminal lands next) ──────────────────────────────
 const panel = $("#side-panel");
 const panelContent = $("#panel-content");
-let panelView: "files" | "reader" | "git" | "terminal" | null = null;
+let panelView: "files" | "reader" | "git" | "terminal" | "links" | null = null;
 let filesPath = "";
 let readerPath = "";
 let readerWatch = "";
@@ -1222,8 +1505,9 @@ function setPanelTabs(): void {
   $("#btn-files").classList.toggle("active", panelView === "files" || panelView === "reader");
   $("#btn-git").classList.toggle("active", panelView === "git");
   $("#btn-terminal").classList.toggle("active", panelView === "terminal");
+  $("#btn-links").classList.toggle("active", panelView === "links");
 }
-function openPanel(view: "files" | "reader" | "git" | "terminal"): void {
+function openPanel(view: "files" | "reader" | "git" | "terminal" | "links"): void {
   if (!activeId) {
     toast("Open a session first");
     return;
@@ -1237,6 +1521,7 @@ function openPanel(view: "files" | "reader" | "git" | "terminal"): void {
   else if (view === "reader" && !readerPath) requestFiles(filesPath);
   else if (view === "git") renderGit();
   else if (view === "terminal") mountTerminal();
+  else if (view === "links") renderLinks();
 }
 /** Tear down the panel (DOM/state only). Reached via Back (popstate) or closePanel(). */
 function closePanelDom(): void {
@@ -1506,8 +1791,16 @@ async function abandonSession(): Promise<void> {
 /** Kill a session and tidy the UI immediately (the session.deleted broadcast also arrives). */
 function killSession(id: string): void {
   sock.send({ type: "session.kill", sessionId: id });
+  // Optimistically drop it locally so the list/pane update instantly — the server's kill does
+  // network work (delete remote branch, remove worktree) before it broadcasts session.deleted,
+  // and waiting on that round-trip is what made cleanup look like it hung. The later broadcast
+  // is idempotent; a failed kill is reconciled by the next session.list.
+  sessions.delete(id);
+  localStorage.removeItem(`anvil.convo.${id}`);
+  persistSessions();
   if (panelView) closePanel();
-  if (activeId === id) deselectSession(); // don't wait for the (possibly slow) round-trip
+  if (activeId === id) deselectSession(); // also re-renders the list + empty state
+  else renderSessions();
 }
 /** Cleanup found outstanding work — offer to handle it first, or remove anyway. */
 function showOutstandingDialog(outstanding: string[]): void {
@@ -1554,8 +1847,19 @@ function showGitResult(e: GitResultEvent): void {
 $("#btn-files").addEventListener("click", () => (panelView === "files" || panelView === "reader" ? closePanel() : openPanel("files")));
 $("#btn-git").addEventListener("click", () => (panelView === "git" ? closePanel() : openPanel("git")));
 $("#btn-terminal").addEventListener("click", () => (panelView === "terminal" ? closePanel() : openPanel("terminal")));
+$("#btn-links").addEventListener("click", () => (panelView === "links" ? closePanel() : openPanel("links")));
 $("#panel-close").addEventListener("click", closePanel);
-document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.addEventListener("click", () => openPanel(t.dataset.view as "files" | "reader" | "git" | "terminal")));
+document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.addEventListener("click", () => openPanel(t.dataset.view as "files" | "reader" | "git" | "terminal" | "links")));
+
+// Click anywhere off the open side panel to dismiss it. The header toggles, in-conversation
+// file links, and the floating quote button legitimately drive/feed the panel, so they're
+// excluded (they manage their own open/close). Pointerdown beats those handlers' click.
+document.addEventListener("pointerdown", (e) => {
+  if (!panelView) return; // panel already closed
+  const t = e.target as HTMLElement;
+  if (t.closest("#side-panel") || t.closest("#header") || t.closest(".file-link") || t.closest("#quote-btn")) return;
+  closePanel();
+});
 
 // ── Modals ─────────────────────────────────────────────────────────────────────
 let onDirs: ((e: DirsListResultEvent) => void) | null = null;
@@ -1578,10 +1882,10 @@ function closeModalDom(): void {
   $("#modal-root").innerHTML = "";
 }
 const closeModal = (): void => dismissOverlay("modal"); // programmatic close → unwind the back-stack
-const MODEL_AUTONOMY = `<div class="row">
-  <label>Model<select id="ns-model"><option value="opus">Opus</option><option value="sonnet">Sonnet</option></select></label>
-  <label>Autonomy<select id="ns-auto"><option value="mostly-autonomous">Mostly autonomous</option><option value="allowlist">Allowlist</option><option value="prompt-all">Prompt all</option></select></label>
-</div>`;
+// New sessions default to Opus + mostly-autonomous; the picker UI was removed as unnecessary
+// (UI refinement). Change these here if a chooser is ever reintroduced.
+const DEFAULT_MODEL = "opus";
+const DEFAULT_AUTONOMY = "mostly-autonomous";
 
 /** A reusable directory browser (used by add-environment and one-off). */
 function browserMarkup(): string {
@@ -1628,7 +1932,6 @@ function showNewSession(): void {
       <label>Session name<input id="ns-name" placeholder="e.g. fix-login-bug" /></label>
       <p class="small muted" id="ns-note"></p>
       <p class="small warn-text" id="ns-warn"></p>
-      ${MODEL_AUTONOMY}
       <div class="btns"><button type="button" id="ns-cancel">Cancel</button><button type="button" id="ns-create">Create</button></div>
       <p class="small muted"><a id="ns-manage" href="#">⚙ Manage environments…</a> · <a id="ns-oneoff" href="#">one-off folder…</a></p></div>`;
   }
@@ -1686,8 +1989,8 @@ function showNewSession(): void {
     const common = {
       title: name,
       environmentId: env.id,
-      model: $<HTMLSelectElement>("#ns-model").value,
-      autonomy: $<HTMLSelectElement>("#ns-auto").value,
+      model: DEFAULT_MODEL,
+      autonomy: DEFAULT_AUTONOMY,
     };
     const cmd = env.isRepo
       ? { type: "session.create" as const, source: "fresh-worktree", repoRoot: env.repoRoot, base: env.defaultBase ?? "HEAD", ...common }
@@ -1787,7 +2090,6 @@ function showOneOff(): void {
   m.innerHTML = `<div class="modal-box"><h3>One-off session</h3>
     <p class="small muted">Work directly in a folder (no worktree):</p>
     ${browserMarkup()}
-    ${MODEL_AUTONOMY}
     <div class="btns"><button type="button" id="oo-back">Back</button><button type="button" id="oo-create">Open here</button></div></div>`;
   showModal(m);
   wireBrowser();
@@ -1798,8 +2100,8 @@ function showOneOff(): void {
       type: "session.create",
       source: "existing-dir",
       cwd: browse.path,
-      model: $<HTMLSelectElement>("#ns-model").value,
-      autonomy: $<HTMLSelectElement>("#ns-auto").value,
+      model: DEFAULT_MODEL,
+      autonomy: DEFAULT_AUTONOMY,
     });
     closeModal();
   };

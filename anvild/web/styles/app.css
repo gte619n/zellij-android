@@ -327,6 +327,68 @@ details.tool-result.error > summary { color: var(--danger); }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #1c2024; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 1100; }
 #toast.show { opacity: 1; }
 
+/* Per-message timestamps */
+.msg-time { font-size: 10px; color: var(--muted); margin-top: 5px; opacity: 0.8; }
+.bubble.user .msg-time { text-align: right; }
+
+/* One-click copy button on code blocks (commands, snippets, output) */
+.md pre, details.tool-result pre { position: relative; }
+.copy-btn { position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; justify-content: center; padding: 3px 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; opacity: 0.5; transition: opacity 0.12s, color 0.12s; }
+.md pre:hover .copy-btn, details.tool-result pre:hover .copy-btn { opacity: 1; }
+.copy-btn .msym { font-size: 15px; }
+.copy-btn.copied { color: var(--accent); border-color: var(--accent); opacity: 1; }
+
+/* Consolidated activity block — the turn's tool/thinking churn, collapsed to a preview */
+.activity { align-self: stretch; max-width: 100%; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 12px; color: var(--muted); }
+.activity > summary { cursor: pointer; list-style: none; padding: 8px 11px; }
+.activity > summary::-webkit-details-marker { display: none; }
+.activity-row { display: flex; align-items: center; gap: 8px; }
+.activity-title { font-weight: 600; color: var(--text); }
+.activity-ind { display: inline-flex; align-items: center; gap: 3px; }
+.activity-ind i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: think 1.1s infinite ease-in-out; }
+.activity-ind i:nth-child(2) { animation-delay: 0.18s; }
+.activity-ind i:nth-child(3) { animation-delay: 0.36s; }
+.activity:not(.live) .activity-ind .msym { color: var(--accent); font-size: 16px; }
+.activity-chevron { margin-left: auto; font-size: 18px; transition: transform 0.15s; }
+.activity[open] .activity-chevron { transform: rotate(180deg); }
+.activity-tail { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.activity[open] .activity-tail { display: none; }
+.activity-tail .tool, .activity-full .tool { margin: 0; }
+.activity-tail .tool { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-tail .tool.result-error, .activity-full .tool.result-error { color: var(--danger); }
+.activity-full { padding: 2px 11px 10px; display: flex; flex-direction: column; gap: 5px; }
+.activity-full details.tool-result { margin: 0; }
+
+/* Links panel — collected URLs/addresses, in the side panel's "Links" tab */
+.link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.link-row { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; }
+.link-row a { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 8px 10px; color: var(--accent); text-decoration: none; font-size: 13px; }
+.link-row a .msym { font-size: 15px; flex-shrink: 0; }
+.link-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-row a:hover { text-decoration: underline; }
+.links-empty { padding: 6px 2px; }
+.links-empty code { background: var(--tool-bg); padding: 1px 5px; border-radius: 5px; }
+.ref-copy { border: none; border-left: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; padding: 8px 9px; display: inline-flex; flex-shrink: 0; }
+.ref-copy:hover { color: var(--accent); background: var(--panel); }
+.ref-copy .msym { font-size: 15px; }
+/* Count badge on the header Links button (links arrived while the panel is closed) */
+#btn-links.has-links { position: relative; }
+#btn-links.has-links::after { content: attr(data-count); position: absolute; top: -6px; right: -6px; background: var(--accent); color: #fff; font-size: 9px; font-weight: 700; line-height: 14px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; text-align: center; }
+
+/* File-offer card — a deliverable file presented as an attachment "from the model" */
+.bubble.file-offer { align-self: flex-start; max-width: min(420px, 100%); }
+.fo-card { display: flex; align-items: center; gap: 11px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 11px 13px; }
+.fo-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); flex-shrink: 0; }
+.fo-icon .msym { font-size: 22px; color: var(--accent); }
+.fo-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fo-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fo-sub { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.fo-taildrop { display: inline-flex; align-items: center; gap: 3px; color: var(--accent); }
+.fo-taildrop .msym { font-size: 13px; }
+.fo-dl { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: #fff; flex-shrink: 0; transition: transform 0.1s; }
+.fo-dl:hover { transform: scale(1.06); }
+.fo-dl .msym { font-size: 20px; }
+
 #sidebar.collapsed { display: none; }
 
 @media (max-width: 720px) {
