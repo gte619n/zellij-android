@@ -35,6 +35,9 @@ export class Session {
   private readonly alwaysAllow = new Set<string>();
   /** Set while blocked on a decision so a (re)attaching client can re-surface it (arch §6.4). */
   pendingPermission: PendingPermission | undefined;
+  /** Once disposed (killed/archived/shutdown) `emit` is a no-op — a late-draining agent turn must
+   *  not write into a dead session (would target a removed dir/connection and crash the daemon). */
+  private disposed = false;
 
   constructor(
     public data: SessionData,
@@ -53,13 +56,36 @@ export class Session {
     return this.nextSeq - 1;
   }
 
-  /** Mint `seq`, persist to the event log, broadcast to attached connections, mark dirty. */
+  get isDisposed(): boolean {
+    return this.disposed;
+  }
+  /** Stop accepting events (kill/archive/shutdown). Idempotent. */
+  dispose(): void {
+    this.disposed = true;
+  }
+
+  /** Mint `seq`, persist to the event log, broadcast to attached connections, mark dirty. The
+   *  append/sink/persist steps are individually guarded so one failure (e.g. a removed dir or a
+   *  dead socket on a session being torn down) is logged, not thrown into the agent turn loop. */
   emit(body: SessionEventBody): ServerEvent {
     const seq = this.nextSeq++;
     const event = { ...body, v: PROTOCOL_VERSION, ts: now(), sessionId: this.data.id, seq } as ServerEvent;
-    this.append(event); // durable log (arch §6.4); skips deltas/terminal internally
-    this.sink(this.data.id, event);
-    this.onChange();
+    if (this.disposed) return event; // session is gone; drop the late event silently
+    try {
+      this.append(event); // durable log (arch §6.4); skips deltas/terminal internally
+    } catch (e) {
+      console.error(`[session ${this.data.id}] append failed: ${e instanceof Error ? e.message : e}`);
+    }
+    try {
+      this.sink(this.data.id, event);
+    } catch (e) {
+      console.error(`[session ${this.data.id}] broadcast failed: ${e instanceof Error ? e.message : e}`);
+    }
+    try {
+      this.onChange();
+    } catch (e) {
+      console.error(`[session ${this.data.id}] persist failed: ${e instanceof Error ? e.message : e}`);
+    }
     return event;
   }
 

@@ -25,7 +25,7 @@ import { newId } from "../util/ids";
 import type { ConnectionRegistry } from "../server/registry";
 import { Session } from "./session";
 import { SessionStore } from "./store";
-import { createWorktree, gitStatus, removeWorktree } from "./worktree";
+import { createWorktree, gitStatus, recreateWorktree, removeWorktree, worktreeHealth } from "./worktree";
 import { AgentDriver } from "../agent/driver";
 import { buildAgentEnv } from "../agent/env";
 import { PermissionBroker } from "../agent/permissions";
@@ -486,6 +486,7 @@ export class Supervisor {
 
   async kill(id: string): Promise<void> {
     const s = this.require(id);
+    s.dispose(); // stop accepting events first, so a late-draining turn can't write to a removed dir
     await this.drivers.get(id)?.stop(); // interrupt the agent SDK query + close its input
     this.drivers.delete(id);
     this.clearWatchers(id);
@@ -500,6 +501,48 @@ export class Supervisor {
     this.logs.delete(id);
     this.persist();
     this.registry.toAll({ v: PROTOCOL_VERSION, type: "session.deleted", ts: now(), sessionId: id });
+  }
+
+  /**
+   * Clean process exit (graceful restart, arch §5): interrupt every agent turn, reap terminals, and
+   * flush the registry to disk. Called from the SIGTERM/SIGINT handler so a launchd `kickstart -k`
+   * (or a manual restart) doesn't leave half-written state or orphaned children.
+   */
+  async shutdown(): Promise<void> {
+    await Promise.allSettled([...this.drivers.values()].map((d) => d.stop()));
+    for (const id of [...this.terminals.keys()]) this.killTerminal(id);
+    this.persist();
+  }
+
+  /**
+   * Un-stick a session without deleting it (arch §5): drop any stale driver, recover a missing
+   * worktree, deny+clear a parked permission, and reset status to idle. The recovery path for a
+   * session wedged by a crash/restart or a removed worktree — answerable from any client.
+   */
+  async reset(id: string): Promise<void> {
+    const s = this.require(id);
+    await this.drivers.get(id)?.stop(); // a wedged/stale query is dropped; next prompt starts fresh
+    this.drivers.delete(id);
+    this.clearWatchers(id);
+    this.killTerminal(id);
+    this.broker.resolveSession(id, "deny"); // unblock any hook parked on this session
+    s.clearPermission();
+
+    let recovered: string | undefined;
+    if (s.data.source === "fresh-worktree" && s.data.worktree) {
+      const { repoRoot, branch, base } = s.data.worktree;
+      if (worktreeHealth(s.data.cwd, branch) !== "ok") {
+        const r = recreateWorktree(repoRoot, s.data.cwd, branch, base);
+        recovered = r.ok ? `restored worktree from \`${branch}\`` : `worktree could not be restored (${r.error})`;
+      }
+    }
+    const g = gitStatus(s.data.cwd);
+    if (g) s.data.git = g;
+    s.data.status = "idle";
+    s.data.lastActivityAt = now();
+    this.persist();
+    this.broadcastUpdated(s.data);
+    s.emit({ type: "assistant.message", blocks: [{ kind: "markdown", rendered: this.renderer.render(`🔄 _Session reset${recovered ? ` — ${recovered}` : ""}. Re-send your message to continue._`) }] });
   }
 
   // ── internals ──────────────────────────────────────────────────────────────
@@ -568,18 +611,66 @@ export class Supervisor {
 
   private restore(): void {
     const transient: SessionData["status"][] = ["thinking", "running_tool", "awaiting_permission"];
+    let recovered = 0;
+    let quarantined = 0;
     for (const p of this.store.loadAll()) {
-      // a daemon restart/crash means no live agent process; a session caught mid-turn had its
-      // turn interrupted — reset to idle and leave a visible notice so it isn't silently lost.
-      const interrupted = transient.includes(p.data.status);
-      if (interrupted) p.data.status = "idle";
-      const session = this.wrap(p.data, p.lastSeq);
-      this.sessions.set(p.data.id, session);
-      if (interrupted) {
-        const notice = "⚠️ _The previous turn was interrupted by a daemon restart. Re-send your message to continue._";
-        session.emit({ type: "assistant.message", blocks: [{ kind: "markdown", rendered: this.renderer.render(notice) }] });
+      try {
+        // a daemon restart/crash means no live agent process; a session caught mid-turn had its
+        // turn interrupted — reset to idle and leave a visible notice so it isn't silently lost.
+        const interrupted = transient.includes(p.data.status);
+        if (interrupted) p.data.status = "idle";
+        const session = this.wrap(p.data, p.lastSeq);
+        this.sessions.set(p.data.id, session);
+
+        const notice = this.recoverWorktreeOnRestore(p.data); // returns a notice if anything happened
+        if (notice?.recovered) recovered++;
+        if (interrupted) {
+          session.emit({
+            type: "assistant.message",
+            blocks: [{ kind: "markdown", rendered: this.renderer.render("⚠️ _The previous turn was interrupted by a daemon restart. Re-send your message to continue._") }],
+          });
+        }
+        if (notice) {
+          session.emit({ type: "assistant.message", blocks: [{ kind: "markdown", rendered: this.renderer.render(notice.message) }] });
+        }
+      } catch (e) {
+        // One unloadable session must not crash the daemon (no startup crash-loop). Skip it; its
+        // state stays on disk for inspection and the rest of the fleet loads normally.
+        quarantined++;
+        console.error(`[restore] quarantined session ${p?.data?.id ?? "<unknown>"}: ${e instanceof Error ? e.message : e}`);
       }
     }
+    this.persist(); // reconcile disk == memory after status resets / recovery (fixes drift)
+
+    const known = new Set(this.sessions.keys());
+    const orphanDirs = this.store.listSessionDirs().filter((d) => !known.has(d));
+    console.log(
+      `[restore] ${this.sessions.size} session(s) loaded` +
+        ` · ${recovered} worktree(s) recovered · ${quarantined} quarantined` +
+        (orphanDirs.length ? ` · ${orphanDirs.length} orphan state dir(s)` : ""),
+    );
+  }
+
+  /**
+   * On restore, make sure a fresh-worktree session still has a usable worktree. Missing / non-git
+   * dirs are auto-recreated from the branch; a worktree checked out on the wrong branch is left
+   * alone (it may hold uncommitted work) but flagged for the user to Reset. Returns a notice to
+   * surface in the conversation, or undefined if the worktree was already healthy.
+   */
+  private recoverWorktreeOnRestore(data: SessionData): { message: string; recovered: boolean } | undefined {
+    if (data.source !== "fresh-worktree" || !data.worktree) return undefined;
+    const { repoRoot, branch, base } = data.worktree;
+    const health = worktreeHealth(data.cwd, branch);
+    if (health === "ok") return undefined;
+    if (health === "wrong-branch") {
+      return { message: `⚠️ _This worktree is checked out on the wrong branch (expected \`${branch}\`). Use **Reset** to restore it._`, recovered: false };
+    }
+    const r = recreateWorktree(repoRoot, data.cwd, branch, base);
+    if (r.ok) {
+      data.git = gitStatus(data.cwd);
+      return { message: `🔧 _Worktree was ${health} after a restart and has been restored from branch \`${branch}\`._`, recovered: true };
+    }
+    return { message: `⚠️ _This session's worktree was ${health} and could not be auto-restored (${r.error}). Use **Reset** to retry._`, recovered: false };
   }
 
   private persist(): void {

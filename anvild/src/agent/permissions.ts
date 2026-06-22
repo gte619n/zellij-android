@@ -33,6 +33,19 @@ export class PermissionBroker {
     p.resolve({ decision, updatedInput: updatedInput as Record<string, unknown> | undefined });
     return true;
   }
+
+  /** Resolve every prompt parked for a session (used by session.reset to unblock a wedged hook). */
+  resolveSession(sessionId: string, decision: PermissionDecision): number {
+    let n = 0;
+    for (const [requestId, p] of this.pending) {
+      if (p.sessionId === sessionId) {
+        this.pending.delete(requestId);
+        p.resolve({ decision });
+        n++;
+      }
+    }
+    return n;
+  }
 }
 
 const SUGGESTIONS = (tool: string): PermissionSuggestion[] => [

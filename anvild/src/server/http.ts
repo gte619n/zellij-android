@@ -71,6 +71,8 @@ async function serveWeb(pathname: string): Promise<Response | null> {
 export interface ServerHandle {
   port: number;
   stop: () => void;
+  /** Graceful shutdown: flush + reap drivers/terminals, then stop the HTTP server (arch §5). */
+  shutdown: () => Promise<void>;
 }
 
 export interface ServerOptions {
@@ -219,6 +221,17 @@ export function createServer(opts: ServerOptions): ServerHandle {
           return Response.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 409 });
         }
       }
+      // Un-stick a session over REST (parity with the WS command) — recovers a missing worktree,
+      // clears parked permissions, and resets status to idle.
+      const resetMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/reset$/);
+      if (resetMatch && req.method === "POST") {
+        try {
+          await supervisor.reset(decodeURIComponent(resetMatch[1]!));
+          return Response.json({ ok: true });
+        } catch (e) {
+          return Response.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 409 });
+        }
+      }
       if (url.pathname === "/api/push/fcm/register" && req.method === "POST") {
         try {
           const { token } = (await req.json()) as { token?: string };
@@ -301,5 +314,9 @@ export function createServer(opts: ServerOptions): ServerHandle {
   return {
     port: server.port ?? opts.port,
     stop: () => server.stop(true),
+    shutdown: async () => {
+      await supervisor.shutdown();
+      server.stop(true);
+    },
   };
 }

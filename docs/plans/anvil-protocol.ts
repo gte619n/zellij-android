@@ -457,6 +457,10 @@ export interface SessionUnarchiveCmd extends Envelope, Correlated {
   type: "session.unarchive";
   sessionId: SessionId;
 }
+export interface SessionResetCmd extends Envelope, Correlated {
+  type: "session.reset"; // un-stick: drop stale driver, recover worktree, clear parked perms → idle
+  sessionId: SessionId;
+}
 /** Git / gh operations on the session's worktree (arch §8). */
 export interface GitCmd extends Envelope, Correlated {
   type: "git";
@@ -593,6 +597,7 @@ export type ClientCommand =
   | SessionKillCmd
   | SessionArchiveCmd
   | SessionUnarchiveCmd
+  | SessionResetCmd
   | SessionSetModelCmd
   | SessionSetAutonomyCmd
   | GitCmd

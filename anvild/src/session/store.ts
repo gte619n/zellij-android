@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Session as SessionData } from "@protocol";
 
@@ -25,13 +25,43 @@ export class SessionStore {
     try {
       const parsed = JSON.parse(readFileSync(this.file, "utf8")) as { sessions?: PersistedSession[] };
       return parsed.sessions ?? [];
-    } catch {
+    } catch (e) {
+      // A truncated/corrupt registry must NOT silently wipe every session. Move it aside so the
+      // daemon can still start (with whatever sessions it can otherwise reconstruct) and the bad
+      // file is kept for forensics.
+      const backup = `${this.file}.corrupt-${Date.now()}`;
+      try {
+        renameSync(this.file, backup);
+        console.error(`[store] sessions.json was unreadable (${e instanceof Error ? e.message : e}); backed up to ${backup}`);
+      } catch {
+        /* best-effort */
+      }
       return [];
     }
   }
 
+  /** Atomic write (tmp + rename) so a crash mid-write can never truncate the registry. */
   saveAll(sessions: PersistedSession[]): void {
-    writeFileSync(this.file, JSON.stringify({ sessions }, null, 2));
+    const tmp = `${this.file}.tmp`;
+    writeFileSync(tmp, JSON.stringify({ sessions }, null, 2));
+    renameSync(tmp, this.file);
+  }
+
+  /** Session state dirs present on disk (for restore reconciliation/logging). */
+  listSessionDirs(): string[] {
+    const dir = join(this.stateDir, "sessions");
+    if (!existsSync(dir)) return [];
+    try {
+      return readdirSync(dir).filter((name) => {
+        try {
+          return statSync(join(dir, name)).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return [];
+    }
   }
 
   sessionDir(id: string): string {

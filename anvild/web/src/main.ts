@@ -1382,6 +1382,7 @@ function renderGit(): void {
     <div class="git-row git-stages">${stageBtns}</div>
     <hr />
     <div class="git-row">
+      <button type="button" id="ga-reset" title="Un-stick: recover the worktree, clear a parked permission, reset to idle">${icon("restart_alt")} Reset</button>
       <button type="button" id="ga-cleanup">${icon("cleaning_services")} Cleanup</button>
       <button type="button" class="danger" id="ga-abandon">${icon("delete_forever")} Abandon</button>
     </div>
@@ -1401,6 +1402,7 @@ function renderGit(): void {
     const btn = document.getElementById(`ga-${m.key}`) as HTMLButtonElement | null;
     if (btn) btn.onclick = () => runStage(m.key, m.label);
   }
+  $("#ga-reset").onclick = resetSession;
   $("#ga-cleanup").onclick = cleanupSession;
   $("#ga-abandon").onclick = abandonSession;
   applyGitButtons();
@@ -1439,6 +1441,21 @@ function outstandingWork(s: Session | undefined): string[] {
   if (g.ahead > 0) out.push(`${g.ahead} unpushed commit${g.ahead === 1 ? "" : "s"}`);
   if (g.prState === "open") out.push("an open PR (not merged)");
   return out;
+}
+/** Un-stick a session: recover a missing worktree, clear a parked permission, reset to idle. */
+async function resetSession(): Promise<void> {
+  if (!activeId) return;
+  const id = activeId;
+  const ok = await confirmDialog({
+    icon: "restart_alt",
+    title: "Reset this session?",
+    body: "Recovers the worktree if it's missing, clears any pending permission, drops the current turn, and returns the session to idle. Your committed work is untouched.",
+    confirmLabel: "Reset",
+  });
+  if (ok) {
+    sock.send({ type: "session.reset", sessionId: id });
+    setGitOutput("resetting…");
+  }
 }
 async function cleanupSession(): Promise<void> {
   if (!activeId) return;
