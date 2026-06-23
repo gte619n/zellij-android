@@ -197,7 +197,7 @@ struct WizardView: View {
         Text("Is this your first Anvil Mac, or are you adding it to an existing fleet?").font(.callout)
         HStack(spacing: 10) {
           roleButton("Establish a new fleet", "flag.checkered", prominent: true) { role = .establish }
-          roleButton("Join an existing fleet", "person.2.badge.plus") { startJoin() }
+          roleButton("Join an existing fleet", "person.2.fill") { startJoin() }
         }
       case .establish:
         Card {
@@ -235,7 +235,7 @@ struct WizardView: View {
   private func roleButton(_ title: String, _ symbol: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       VStack(spacing: 8) {
-        Image(systemName: symbol).font(.title)
+        Image(systemName: symbol).font(.title).foregroundStyle(Color.anvil) // always visible, even on a .secondary button
         Text(title).font(.callout).multilineTextAlignment(.center)
       }.frame(maxWidth: .infinity).padding(.vertical, 14)
     }
