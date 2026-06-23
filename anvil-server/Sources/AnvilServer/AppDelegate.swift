@@ -79,6 +79,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func showAddMac() {
     popover.performClose(nil)
-    _ = window(&addMacWindow, title: "Add a Mac", view: AddMacView(state: state, close: { [weak self] in self?.addMacWindow?.close() }))
+    _ = window(&addMacWindow, title: "Fleet", view: FleetView(state: state, close: { [weak self] in self?.addMacWindow?.close() }))
   }
 }

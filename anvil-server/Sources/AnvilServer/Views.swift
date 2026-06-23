@@ -63,7 +63,7 @@ struct MenuView: View {
 
       VStack(alignment: .leading, spacing: 2) {
         menuButton("Open client in browser", "safari", state.openClient, enabled: state.daemonURL != nil)
-        menuButton("Add a Mac to the fleet…", "person.2.badge.plus", { state.openAddMac?() }, enabled: state.phase == .running)
+        menuButton("Manage fleet…", "rectangle.3.group", { state.openAddMac?() }, enabled: state.hasToken)
         menuButton("Restart daemon", "arrow.clockwise", state.restart, enabled: state.hasToken && state.hasCheckout)
         menuButton("Settings…", "gearshape", { state.openWizard?() })
       }
@@ -199,6 +199,12 @@ struct WizardView: View {
           roleButton("Establish a new fleet", "flag.checkered", prominent: true) { role = .establish }
           roleButton("Join an existing fleet", "person.2.fill") { startJoin() }
         }
+        if state.hasToken {
+          Divider()
+          Button { state.openAddMac?() } label: {
+            Label("Manage fleet / add a Mac…", systemImage: "rectangle.3.group").frame(maxWidth: .infinity)
+          }.buttonStyle(.borderedProminent).tint(.anvil)
+        }
       case .establish:
         Card {
           Label("Log in with your Claude subscription", systemImage: "1.circle.fill").font(.callout.weight(.medium))
@@ -314,38 +320,68 @@ struct WizardView: View {
   private func stopJoin() { state.cancelJoin() }
 }
 
-// MARK: - Hub: add a Mac to the fleet
+// MARK: - Fleet management (hub): members + add a Mac
 
-struct AddMacView: View {
+struct FleetView: View {
   @ObservedObject var state: AppState
   let close: () -> Void
   @State private var host = ""
   @State private var code = ""
   @State private var status = ""
   @State private var sending = false
+  @State private var members = FleetRegistry.all()
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Header(symbol: "person.2.badge.plus", title: "Add a Mac to the fleet", subtitle: "Share this fleet's login over your tailnet")
+      Header(symbol: "rectangle.3.group", title: "Fleet", subtitle: "The Macs sharing this subscription login")
+
       Card {
-        Text("On the new Mac, open Anvil → Join an existing fleet. Enter its tailnet name and the 6-digit code it shows.")
-          .font(.callout).foregroundStyle(.secondary)
-        Label("Tailnet name", systemImage: "network").font(.caption).foregroundStyle(.secondary)
+        Label("This fleet", systemImage: "checkmark.seal").font(.callout.weight(.medium))
+        // The hub itself.
+        memberRow(name: state.serverName + "  (this Mac)", host: Tailscale.magicDNSName() ?? "—", removable: false)
+        if members.isEmpty {
+          Text("No other Macs yet. Add one below.").font(.caption).foregroundStyle(.secondary)
+        } else {
+          ForEach(members) { m in memberRow(name: m.serverName, host: m.host, removable: true, serverId: m.serverId) }
+        }
+        Text("Re-login (Settings) refreshes the token to every Mac here automatically.").font(.caption2).foregroundStyle(.secondary)
+      }
+
+      Card {
+        Label("Add a Mac", systemImage: "plus.circle.fill").font(.callout.weight(.medium))
+        Text("On the new Mac: open Anvil → Join an existing fleet, then enter its tailnet name + the 6-digit code it shows.")
+          .font(.caption).foregroundStyle(.secondary)
         TextField("joiner.tailnet.ts.net", text: $host).textFieldStyle(.roundedBorder)
-        Label("Pairing code", systemImage: "number").font(.caption).foregroundStyle(.secondary)
         TextField("6-digit code", text: $code).textFieldStyle(.roundedBorder)
+        Button { send() } label: {
+          Label(sending ? "Sending…" : "Send invite", systemImage: "paperplane.fill").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent).tint(.anvil).disabled(sending || host.isEmpty || code.count != 6 || !state.hasToken)
+        if !state.hasToken { Text("Set up this Mac first (it needs a token to share).").font(.caption2).foregroundStyle(.orange) }
       }
-      Button { send() } label: {
-        Label(sending ? "Sending…" : "Send invite", systemImage: "paperplane.fill").frame(maxWidth: .infinity)
-      }
-      .buttonStyle(.borderedProminent).tint(.anvil).disabled(sending || host.isEmpty || code.count != 6)
 
       if !status.isEmpty { Label(status, systemImage: "info.circle").font(.caption) }
       Spacer()
       HStack { Spacer(); Button("Close") { close() } }
     }
     .padding(22)
-    .frame(width: 480, height: 360)
+    .frame(width: 480, height: 500)
+  }
+
+  private func memberRow(name: String, host: String, removable: Bool, serverId: String = "") -> some View {
+    HStack(spacing: 8) {
+      Image(systemName: "desktopcomputer").foregroundStyle(Color.anvil)
+      VStack(alignment: .leading, spacing: 0) {
+        Text(name).font(.callout)
+        Text(host).font(.caption2).foregroundStyle(.secondary)
+      }
+      Spacer()
+      if removable {
+        Button { FleetRegistry.remove(serverId: serverId); members = FleetRegistry.all() } label: {
+          Image(systemName: "minus.circle")
+        }.buttonStyle(.plain).foregroundStyle(.secondary).help("Forget this Mac")
+      }
+    }
   }
 
   private func send() {
@@ -356,8 +392,10 @@ struct AddMacView: View {
       sending = false
       switch result {
       case .success(let reply):
-        if reply.ok { state.recordMember(host: h, reply: reply); status = "✅ \(h) joined the fleet." }
-        else { status = "Rejected: \(reply.error ?? "unknown")" }
+        if reply.ok {
+          state.recordMember(host: h, reply: reply); members = FleetRegistry.all()
+          status = "✅ \(h) joined the fleet."; host = ""; code = ""
+        } else { status = "Rejected: \(reply.error ?? "unknown")" }
       case .failure(let e): status = "Failed: \(e.localizedDescription)"
       }
     }
