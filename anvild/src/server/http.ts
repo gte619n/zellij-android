@@ -4,12 +4,14 @@ import { checkAuth } from "../auth/guard";
 import { newId } from "../util/ids";
 import { dispatch } from "./dispatch";
 import { ConnectionRegistry } from "./registry";
+import { loadServerIdentity, serverHelloEvent } from "./identity";
+import { discoverFleet } from "./fleet";
 import { PushRegistry } from "../push/registry";
 import { Supervisor } from "../session/supervisor";
 import type { MarkdownRenderer } from "../render/markdown";
 import type { ConnState } from "./connection";
 import { join } from "node:path";
-import { hostname, networkInterfaces } from "node:os";
+import { networkInterfaces } from "node:os";
 import { VERSION } from "../version";
 
 export { VERSION };
@@ -92,6 +94,7 @@ export interface ServerOptions {
  * (`port: 0`) against a temp `stateDir` and stop it.
  */
 export function createServer(opts: ServerOptions): ServerHandle {
+  const identity = loadServerIdentity(opts.stateDir);
   const registry = new ConnectionRegistry();
   const push = new PushRegistry();
   const supervisor = new Supervisor(
@@ -117,6 +120,7 @@ export function createServer(opts: ServerOptions): ServerHandle {
   const WS = {
     open(ws: ServerWebSocket<ConnState>) {
       registry.add(ws);
+      ws.send(JSON.stringify(serverHelloEvent(identity))); // who am I — first frame (fleet §3/§6)
       ws.send(JSON.stringify(supervisor.sessionListEvent()));
       ws.send(JSON.stringify(supervisor.budgetEvent()));
       ws.send(JSON.stringify(supervisor.environmentsEvent()));
@@ -151,10 +155,18 @@ export function createServer(opts: ServerOptions): ServerHandle {
           ok: true,
           subscriptionAuthOk: auth.subscriptionAuthOk,
           version: VERSION,
-          serverName: process.env.ANVIL_SERVER_NAME || hostname(),
+          serverId: identity.serverId,
+          serverName: identity.serverName,
           budget: supervisor.budget(),
         };
         return Response.json(body);
+      }
+
+      // Fleet discovery (anvil-multi-server.md §4.1): enumerate Tailscale peers + probe each
+      // /api/health, return the Anvil daemons found (deduped by serverId) as add-suggestions.
+      if (url.pathname === "/api/fleet/discover" && req.method === "GET") {
+        const body = await discoverFleet({ port: opts.port, selfServerId: identity.serverId });
+        return Response.json(body satisfies rest.FleetDiscoverResponse);
       }
 
       // ADB wifi (Android client): connect / pair the Mac with a phone's wireless-debugging endpoint

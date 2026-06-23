@@ -587,6 +587,12 @@ function onEvent(e: ServerEvent): void {
       if (activeId === e.sessionId) deselectSession();
       else renderSessions();
       return;
+    case "server.hello":
+      // identify the server on this socket as soon as it opens (fleet §3/§6) — keeps the
+      // Environments-by-server grouping correct even before Settings fetches /api/health.
+      currentServer = { id: e.serverId, name: e.serverName, host: new URL(apiUrl("/")).host };
+      if (document.getElementById("env-cards")) renderEnvCards();
+      return;
     case "budget":
       return; // rate-limit gauge is tracked server-side; the UI display is removed for now
 
@@ -1582,7 +1588,15 @@ function onEnvironments(list: Environment[]): void {
 }
 
 // ── Settings & servers (first-class management area) ──────────────────────────────
-let settingsTab: "servers" | "environments" = "servers";
+// The server whose sessions/environments this client is viewing. Fleet groundwork
+// (anvil-multi-server.md §3/§4): today there's one daemon, so this is just "this server";
+// when the client federates many servers, each environment list is tagged with the server
+// it arrived from and the Environments tab renders one section per server.
+let currentServer: { id: string; name: string; host: string } = { id: "", name: "", host: "" };
+function serverHost(): string {
+  return currentServer.host || new URL(apiUrl("/")).host;
+}
+let settingsTab: "servers" | "environments" = "environments";
 function openSettings(): void {
   const root = $("#settings-root");
   root.innerHTML = `<div class="settings-view">
@@ -1591,17 +1605,17 @@ function openSettings(): void {
       <button id="settings-close" class="icon-btn" title="Close">${icon("close")}</button>
     </div>
     <div class="settings-tabs" role="tablist">
-      <button class="stab" data-tab="servers">${icon("dns")} Servers</button>
       <button class="stab" data-tab="environments">${icon("folder")} Environments</button>
+      <button class="stab" data-tab="servers">${icon("dns")} Servers</button>
     </div>
     <div class="settings-body">
-      <section class="settings-panel" data-tab="servers">
-        <div id="server-cards"><p class="small muted">Loading…</p></div>
-      </section>
       <section class="settings-panel" data-tab="environments">
         <div class="section-head"><h3>Environments</h3><button id="set-add-env" class="primary">${icon("add")} Add repo</button></div>
-        <p class="small muted">Environments are git repositories. A new session branches a fresh worktree off one.</p>
+        <p class="small muted">Environments are git repositories, each living on a specific server. A new session branches a fresh worktree off one.</p>
         <div id="env-cards"></div>
+      </section>
+      <section class="settings-panel" data-tab="servers">
+        <div id="server-cards"><p class="small muted">Loading…</p></div>
       </section>
     </div>
   </div>`;
@@ -1627,8 +1641,11 @@ function closeSettings(): void {
 async function renderServerCards(): Promise<void> {
   const host = $("#server-cards");
   try {
-    const h = (await (await apiFetch("/api/health")).json()) as { serverName?: string; version?: string };
+    const h = (await (await apiFetch("/api/health")).json()) as { serverId?: string; serverName?: string; version?: string };
     const daemonHost = new URL(apiUrl("/")).host;
+    // Cache this server's identity so the Environments tab can label which server they live on.
+    currentServer = { id: h.serverId ?? currentServer.id, name: h.serverName ?? daemonHost, host: daemonHost };
+    if (document.getElementById("env-cards")) renderEnvCards();
     host.innerHTML = `<div class="card server-card">
       <div class="card-main"><span class="conn-dot connected"></span><b>${esc(h.serverName ?? daemonHost)}</b> <span class="small muted">(this server)</span></div>
       <div class="small muted"><code>${esc(daemonHost)}</code> · anvild ${esc(h.version ?? "?")}</div>
@@ -1747,11 +1764,13 @@ function renderEnvCards(): void {
   const host = document.getElementById("env-cards");
   if (!host) return;
   const envs = [...environments.values()];
+  // Group under the server they belong to (one section today; one per server once federated).
+  const srvHead = `<div class="env-server-head"><span class="conn-dot connected"></span><b>${esc(currentServer.name || serverHost())}</b> <span class="small muted"><code>${esc(serverHost())}</code></span></div>`;
   if (envs.length === 0) {
-    host.innerHTML = `<p class="small muted">No environments yet. Add a git repo to get started.</p>`;
+    host.innerHTML = `${srvHead}<p class="small muted">No environments on this server yet. Add a git repo to get started.</p>`;
     return;
   }
-  host.innerHTML = envs
+  host.innerHTML = srvHead + envs
     .map(
       (e) => `<div class="card env-card" data-env="${esc(e.id)}">
       <div class="env-head">

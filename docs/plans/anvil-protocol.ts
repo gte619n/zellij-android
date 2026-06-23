@@ -1,7 +1,11 @@
 /**
  * Anvil wire protocol — shared contract between `anvild` (daemon) and all clients.
  *
- * Status: 0.6-draft (2026-06-23). Companion to `anvil-native-architecture.md` (§6, §8).
+ * Status: 0.7-draft (2026-06-23). Companion to `anvil-native-architecture.md` (§6, §8).
+ *   0.7: fleet identity (anvil-multi-server.md §3/§6) — server.hello event (first frame on
+ *        every WS connection) + HealthResponse.serverId. A stable serverId lets one client
+ *        federate many servers and namespace sessions/environments by (serverId, …).
+ *        Additive; PROTOCOL_VERSION unchanged.
  *   0.6: default "concierge" chat — Session.isDefault (single persistent, pinned,
  *        non-killable general assistant) + session.new_topic (fresh Claude context,
  *        keep scrollback). Both additive; PROTOCOL_VERSION unchanged.
@@ -317,6 +321,20 @@ export interface EnvironmentsEvent extends Envelope {
   type: "environments";
   environments: Environment[];
 }
+/**
+ * First frame the server sends on every WS connection (before session.list/budget/
+ * environments) — tells the client which server it just connected to (anvil-multi-server.md
+ * §3/§6). A client federating many servers keys each socket's sessions/environments by
+ * `serverId` so two servers can never collide in the UI. `serverId` is stable across daemon
+ * restarts (persisted in the state dir); `serverName` is the display label.
+ */
+export interface ServerHelloEvent extends Envelope {
+  type: "server.hello";
+  serverId: string; // stable, persisted (e.g. "srv_…")
+  serverName: string; // display name, default: hostname
+  version: string; // anvild version
+  protocolVersion: ProtocolVersion;
+}
 /** Result of a git/gh operation (arch §8) — carries combined output for display. */
 export type GitOp = "status" | "diff" | "commit" | "push" | "create-pr" | "merge-pr";
 export interface GitResultEvent extends Envelope {
@@ -472,6 +490,7 @@ export interface TerminalExitEvent extends Envelope, SessionScoped {
 /** The full set of messages the server may send. */
 export type ServerEvent =
   // global
+  | ServerHelloEvent
   | SessionListEvent
   | SessionCreatedEvent
   | SessionUpdatedEvent
@@ -776,8 +795,28 @@ export namespace rest {
     /** True only if CLAUDE_CODE_OAUTH_TOKEN is set AND ANTHROPIC_API_KEY is unset (§3). */
     subscriptionAuthOk: boolean;
     version: string;
+    serverId: string; // stable id for this server, persisted in the state dir — fleet identity (§3)
     serverName: string; // display name for this server (default: hostname) — fleet groundwork
     budget: Budget;
+  }
+  /** An Anvil server found on the tailnet by discovery (anvil-multi-server.md §4.1). */
+  export interface DiscoveredServer {
+    serverId: string; // stable identity (dedup key)
+    serverName: string; // display name (falls back to the MagicDNS host)
+    url: string; // https://<magicdns>:<port> — what the client would connect to
+    version: string; // anvild version reported by /api/health
+    online: boolean;
+    isSelf: boolean; // this hub's own daemon (already connected)
+  }
+  /** GET /api/fleet/discover → Anvil servers on the tailnet (anvil-multi-server.md §4.1). The hub
+   *  daemon enumerates Tailscale peers and probes each for /api/health, returning the ones that
+   *  answered as Anvil daemons (deduped by serverId) so the client can offer one-tap additions to
+   *  its registry. Discovery suggests; the explicit join is what makes a server a durable member. */
+  export interface FleetDiscoverResponse {
+    ok: boolean;
+    servers: DiscoveredServer[];
+    /** Set when discovery couldn't run (e.g. Tailscale CLI missing / not logged in). */
+    warning?: string;
   }
   /** GET /api/environments/:id/readme — the repo's README, rendered (arch §8). */
   export interface EnvReadmeResponse {
