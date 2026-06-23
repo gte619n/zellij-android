@@ -1982,11 +1982,17 @@ document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.addEventListene
 
 // Click anywhere off the open side panel to dismiss it. The header toggles, in-conversation
 // file links, and the floating quote button legitimately drive/feed the panel, so they're
-// excluded (they manage their own open/close). Pointerdown beats those handlers' click.
+// excluded (they manage their own open/close). Modals/dialogs and the settings view are layers
+// ABOVE the panel — a pointerdown there must NOT close the panel, because closePanel()
+// (dismissOverlay) unwinds every overlay above the panel too, which would tear down the open
+// dialog mid-click and swallow its button press (this is what made Cleanup/Abandon/Reset, all of
+// which confirm in a dialog over the git panel, silently do nothing). Pointerdown beats those
+// handlers' click.
 document.addEventListener("pointerdown", (e) => {
   if (!panelView) return; // panel already closed
+  if (overlayOpen("modal") || overlayOpen("settings")) return; // a dialog/settings is on top — leave the panel be
   const t = e.target as HTMLElement;
-  if (t.closest("#side-panel") || t.closest("#header") || t.closest(".file-link") || t.closest("#quote-btn")) return;
+  if (t.closest("#side-panel") || t.closest("#header") || t.closest(".file-link") || t.closest("#quote-btn") || t.closest("#modal-root") || t.closest("#settings-root")) return;
   closePanel();
 });
 
