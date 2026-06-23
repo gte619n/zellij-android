@@ -60,14 +60,26 @@ export async function applyUpdate(): Promise<{ output: string }> {
   const root = await repoRoot();
   const log: string[] = [];
 
+  const before = (await run(["git", "rev-parse", "HEAD"], root)).out.trim();
   const pull = await run(["git", "pull", "--ff-only"], root);
   log.push(`$ git pull --ff-only\n${pull.out}`);
   if (pull.code !== 0) throw new Error(`git pull failed (local changes / not fast-forward?):\n${pull.out}`);
 
-  const install = await run(["bun", "install"], anvildDir);
-  log.push(`$ bun install\n${install.out}`);
-  if (install.code !== 0) throw new Error(`bun install failed:\n${install.out}`);
+  // Only reinstall when the pull actually touched dependencies — running `bun install` against the
+  // live daemon's node_modules on every update is needless risk (it can briefly unlink modules the
+  // running process lazy-imports). Empty `before` (no prior HEAD) falls through to install.
+  const changed = before ? (await run(["git", "diff", "--name-only", `${before}..HEAD`], root)).out : "";
+  const depsChanged = !before || /(^|\/)(package\.json|bun\.lockb?)$/m.test(changed);
+  if (depsChanged) {
+    const install = await run(["bun", "install"], anvildDir);
+    log.push(`$ bun install\n${install.out}`);
+    if (install.code !== 0) throw new Error(`bun install failed:\n${install.out}`);
+  } else {
+    log.push("(dependencies unchanged — skipping bun install)");
+  }
 
+  // build:web stages into dist.next and atomically swaps, so a build failure here leaves the live
+  // bundle the daemon is serving untouched (see web/build.ts).
   const build = await run(["bun", "run", "build:web"], anvildDir);
   log.push(`$ bun run build:web\n${build.out}`);
   if (build.code !== 0) throw new Error(`web build failed:\n${build.out}`);

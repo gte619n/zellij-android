@@ -2,4 +2,6 @@ node_modules/
 *.log
 .env
 web/dist/
+web/dist.next/
+web/dist.old/
 

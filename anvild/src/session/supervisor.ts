@@ -130,10 +130,15 @@ export class Supervisor {
     this.registry.toAll(this.environmentsEvent());
   }
 
+  private updating = false; // guards against concurrent applyUpdate (double-click → racing builds)
+
   /** Update the daemon itself (arch §5): pull its source, rebuild web, and restart to apply.
    *  `checkOnly` just fetches and reports whether an update is available. */
   async daemonUpdate(checkOnly: boolean): Promise<DaemonUpdateResultEvent> {
     const base = { v: PROTOCOL_VERSION, type: "daemon.update.result" as const, ts: now(), currentVersion: VERSION };
+    if (!checkOnly && this.updating) {
+      return { ...base, ok: false, phase: "error", output: "an update is already in progress" };
+    }
     try {
       const chk = await selfupdate.checkForUpdate();
       if (checkOnly) {
@@ -142,11 +147,13 @@ export class Supervisor {
       if (chk.behind === 0) {
         return { ...base, ok: true, phase: "up-to-date", output: chk.output, behind: 0 };
       }
+      this.updating = true;
       const upd = await selfupdate.applyUpdate();
       if (selfupdate.isManaged()) {
         selfupdate.scheduleRestart();
         return { ...base, ok: true, phase: "updated", output: upd.output, willRestart: true };
       }
+      this.updating = false; // no restart coming — allow another attempt
       return {
         ...base,
         ok: true,
@@ -155,6 +162,7 @@ export class Supervisor {
         willRestart: false,
       };
     } catch (e) {
+      this.updating = false;
       return { ...base, ok: false, phase: "error", output: e instanceof Error ? e.message : String(e) };
     }
   }
