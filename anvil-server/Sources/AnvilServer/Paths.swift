@@ -9,19 +9,31 @@ enum Paths {
   static var configEnv: String { home + "/.config/anvil/env" }       // CLAUDE_CODE_OAUTH_TOKEN, chmod 600
   static var stateDir: String { home + "/.local/state/anvil" }
 
-  /// The bundled daemon checkout, if shipped in Resources/anvild.
+  /// Where the daemon is provisioned to run from — a stable, writable location (NOT inside the .app,
+  /// which is read-only/signed and may move). The bundled source is copied here and `bun install`
+  /// populates node_modules here (see Provision).
+  static var installRoot: String { home + "/.local/share/anvil/anvild" }
+
+  /// The slim daemon SOURCE shipped in Resources/anvild (no node_modules — Provision installs those).
   static var bundledAnvild: String? {
     let p = Bundle.main.resourcePath.map { $0 + "/anvild" }
     return p.flatMap { FileManager.default.fileExists(atPath: $0 + "/scripts/service.sh") ? $0 : nil }
   }
 
-  /// Resolve the daemon dir: explicit setting → env → bundled → a dev-checkout guess.
+  /// Resolve the daemon dir the app drives: explicit setting → env → the provisioned install root →
+  /// a dev-checkout guess. (The bundled source isn't returned directly — it has no node_modules; it's
+  /// only the seed Provision copies into `installRoot`.)
   static func anvildDir() -> String? {
     if let s = UserDefaults.standard.string(forKey: "anvildDir"), valid(s) { return s }
     if let e = ProcessInfo.processInfo.environment["ANVILD_DIR"], valid(e) { return e }
-    if let b = bundledAnvild { return b }
+    if runnable(installRoot) { return installRoot }
     for guess in [home + "/Development/zellij-android/anvild"] where valid(guess) { return guess }
     return nil
+  }
+
+  /// A dir that's a checkout AND has dependencies installed (ready to actually run the daemon).
+  static func runnable(_ dir: String) -> Bool {
+    valid(dir) && FileManager.default.fileExists(atPath: dir + "/node_modules")
   }
   static func setAnvildDir(_ dir: String) { UserDefaults.standard.set(dir, forKey: "anvildDir") }
 

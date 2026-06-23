@@ -53,12 +53,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Bundle the daemon checkout into Resources/anvild so the app is self-contained (anvil-server-app.md
-# §3.1: Bun + source + node_modules). Opt in with BUNDLE_ANVILD=../anvild (skipped by default — the
-# 200MB+ node_modules makes for a slow copy; in dev the app finds the checkout via ANVILD_DIR).
+# Bundle the daemon SOURCE into Resources/anvild (no node_modules — the app's Provision step fetches
+# those with `bun install --frozen-lockfile` on first run, version-locked by the shipped bun.lock —
+# anvil-server-app.md §3.1). Keeps the shipped app ~18 MB instead of ~520 MB. web/dist is shipped
+# prebuilt. Opt in with BUNDLE_ANVILD=../anvild; in dev the app finds a checkout via the picker.
 if [ -n "${BUNDLE_ANVILD:-}" ] && [ -d "$BUNDLE_ANVILD" ]; then
-  echo "bundling anvild from $BUNDLE_ANVILD…"
-  rsync -a --exclude .git "$BUNDLE_ANVILD/" "$APP/Contents/Resources/anvild/"
+  echo "bundling anvild source from $BUNDLE_ANVILD (excluding node_modules)…"
+  rsync -a --exclude node_modules --exclude .git "$BUNDLE_ANVILD/" "$APP/Contents/Resources/anvild/"
 fi
 
 echo "ad-hoc signing…"

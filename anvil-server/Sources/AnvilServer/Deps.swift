@@ -12,12 +12,15 @@ enum Deps {
     return r.ok ? r.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil
   }
 
-  /// Install Bun via the official script (`curl … | bash` → `~/.bun/bin`). Network action — run it
-  /// only on an explicit user tap. Calls back on the main thread.
+  /// Bun is pinned (anvild requires ≥ 1.3.14 — macOS PTY use-after-free + fs.watch rewrite).
+  static let bunVersionPin = "1.3.14"
+
+  /// Install Bun via the official script (`curl … | bash` → `~/.bun/bin`), at the pinned version.
+  /// Network action — run it only on an explicit user tap. Calls back on the main thread.
   static func installBun(completion: @escaping (Bool, String) -> Void) {
     DispatchQueue.global(qos: .userInitiated).async {
-      // `-l` so curl/unzip resolve from the user's normal PATH; the script writes to ~/.bun.
-      let r = Shell.run("bash", ["-lc", "curl -fsSL https://bun.sh/install | bash"])
+      // `-l` so curl/unzip resolve from the user's normal PATH; `-s bun-vX` pins the version.
+      let r = Shell.run("bash", ["-lc", "curl -fsSL https://bun.sh/install | bash -s \"bun-v\(bunVersionPin)\""])
       let ok = Shell.which("bun") != nil
       let msg = ok
         ? "Bun installed (\(bunVersion() ?? "ok"))."

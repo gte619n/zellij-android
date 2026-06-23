@@ -162,6 +162,7 @@ struct WizardView: View {
   @State private var bunOK = Deps.bunInstalled()
   @State private var tsOK = Deps.tailscaleInstalled
   @State private var installingBun = false
+  @State private var provisioning = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -175,9 +176,19 @@ struct WizardView: View {
       if !state.hasCheckout {
         let _ = checkoutTick
         Card {
-          Label("Can't find the anvild daemon on this Mac.", systemImage: "folder.badge.questionmark")
-            .font(.callout).foregroundStyle(.red)
-          Button { chooseCheckout() } label: { Label("Choose anvild folder…", systemImage: "folder") }
+          if Paths.bundledAnvild != nil {
+            Label("The Anvil daemon needs to be installed on this Mac.", systemImage: "shippingbox").font(.callout)
+            Text("Copies the bundled daemon to ~/.local/share/anvil and fetches its dependencies (~250 MB, version-locked) with Bun — once.").font(.caption).foregroundStyle(.secondary)
+            Button { provisionDaemon() } label: {
+              if provisioning { HStack(spacing: 5) { ProgressView().controlSize(.small); Text("Installing…") } }
+              else { Label("Install Anvil daemon", systemImage: "arrow.down.circle.fill") }
+            }.buttonStyle(.borderedProminent).tint(.anvil).disabled(provisioning || !bunOK)
+            if !bunOK { Text("Install Bun first (above).").font(.caption2).foregroundStyle(.orange) }
+          } else {
+            Label("Can't find the anvild daemon on this Mac.", systemImage: "folder.badge.questionmark")
+              .font(.callout).foregroundStyle(.red)
+            Button { chooseCheckout() } label: { Label("Choose anvild folder…", systemImage: "folder") }
+          }
         }
       }
 
@@ -264,6 +275,15 @@ struct WizardView: View {
       bunOK = ok
       status = msg
     }
+  }
+
+  private func provisionDaemon() {
+    provisioning = true
+    Provision.run(progress: { status = $0 }, completion: { ok, msg in
+      provisioning = false
+      status = msg
+      checkoutTick += 1 // hasCheckout now resolves to the provisioned install root
+    })
   }
 
   private func chooseCheckout() {

@@ -76,11 +76,15 @@ Goal: double-click `Anvil Server.app`, get a running server in minutes, no termi
    at runtime that the bundler doesn't trace — first hit: `css-tree/data/patch.json` ("Cannot find
    module … from /$bunfs/root"). With ~1650 modules, more such assets are likely; chasing each
    (embed/external per file) is fragile and breaks as deps change.
-3. **So: ship Bun + source + `node_modules`.** This is *exactly what `service.sh` runs in production
-   today* (`bun run src/main.ts`), just relocated into `Anvil Server.app/Contents/Resources/`. No
-   asset-tracing problem, and with `node_modules` present the SDK resolves its own CLI normally
-   (`ANVIL_CLI_PATH` becomes optional). The launcher sets `ANVIL_WEB_DIR` to the bundled `web/dist`
-   (import.meta.dir-relative resolution would otherwise miss it) — also already wired.
+3. **So: ship source, install deps on first run.** The app ships **slim** (~18 MB — daemon source +
+   prebuilt `web/dist` + `bun.lock`, **no `node_modules`**; bundling them was ~520 MB, dominated by
+   the 206 MB native Claude CLI + 80 MB mermaid + 23 MB typescript, none of which belong in a
+   download). `Provision` copies the source to `~/.local/share/anvil/anvild` (stable + writable, not
+   inside the signed/movable `.app`) and runs **`bun install --frozen-lockfile`** so deps come down at
+   the EXACT versions `bun.lock` pins (~250 MB, once, on the user's machine). A `.anvil-app-version`
+   marker (the bundled `package.json` version) triggers re-provision on app upgrade. With
+   `node_modules` then present the SDK resolves its own CLI normally (`ANVIL_CLI_PATH` optional). Bun
+   is installed (pinned) by the wizard if absent.
 
 Daemon changes landed for either path (backward-compatible): `src/agent/cli.ts`
 (`claudeCliOptions()` → `executable:"bun"` in dev, `pathToClaudeCodeExecutable` when `ANVIL_CLI_PATH`
