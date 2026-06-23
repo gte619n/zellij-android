@@ -1304,7 +1304,10 @@ function renderSessionItem(s: Session): HTMLLIElement {
   li.append(a);
   if (!removing) {
     // The concierge is pinned and can't be reordered or moved to Finished, so it isn't draggable.
-    if (!s.isDefault) li.addEventListener("pointerdown", (e) => startSessionPress(e, li)); // press-and-hold → reorder
+    if (!s.isDefault) {
+      li.addEventListener("touchstart", (e) => onRowTouchStart(e, li), { passive: true });
+      li.addEventListener("mousedown", (e) => onRowMouseDown(e, li));
+    }
     const open = document.createElement("button");
     open.className = "row-btn open-tab";
     open.title = "Open in new tab";
@@ -1319,75 +1322,161 @@ function renderSessionItem(s: Session): HTMLLIElement {
   return li;
 }
 
-// ── Long-press to reorder (touch + mouse) ───────────────────────────────────────────────────────
-// Press-and-hold a session row to pick it up, drag it (into the Finished group or a new spot), and
-// drop on release. No drag handle — Android read the handle's long-press as text selection — and
-// rows disable user-select in CSS so the lift is clean. Server-synced via session.arrange.
-const LONG_PRESS_MS = 420;
-const PRESS_MOVE_CANCEL = 10; // px of movement before the hold completes ⇒ it's a scroll/tap, not a lift
-let press: { el: HTMLElement; pointerId: number; x: number; y: number; timer: number; lifted: boolean } | null = null;
+// ── Press-and-hold to reorder (touch + mouse) ───────────────────────────────────────────────────
+// Press-and-hold a row to lift it, then drag — into the Finished group or a new position — and drop
+// on release. No drag handle (Android read a handle's long-press as text selection; rows are
+// user-select:none). Implemented with raw touch/mouse events, NOT pointer events: in an Android
+// WebView a pointer gesture inside a scroll container gets claimed for scrolling — pointermove turns
+// uncancelable and pointercancel fires — so the lift never engaged. Touch events + a hold delay + a
+// non-passive touchmove (preventDefault only AFTER the hold) lets us take the gesture cleanly.
+const LONG_PRESS_MS = 250;
+const MOVE_CANCEL = 9; // px of pre-lift movement: on touch that means "scroll", so abandon the drag
+let drag: { el: HTMLElement; startX: number; startY: number; lastY: number; timer: number; lifted: boolean; touch: boolean } | null = null;
 let justDragged = false; // set briefly after a drop so the row's click doesn't also navigate
+let autoScrollRAF = 0;
+let lastTouchAt = 0; // guards against the synthetic mousedown a tap emits after touchend
 
-function startSessionPress(e: PointerEvent, el: HTMLElement): void {
-  if (e.pointerType === "mouse" && e.button !== 0) return;
-  if ((e.target as HTMLElement).closest(".row-btn")) return; // let row buttons handle their own taps
-  endPress(false); // clear any stale press
-  press = { el, pointerId: e.pointerId, x: e.clientX, y: e.clientY, timer: 0, lifted: false };
-  press.timer = window.setTimeout(liftPress, LONG_PRESS_MS);
-  window.addEventListener("pointermove", onPressMove);
-  window.addEventListener("pointerup", onPressUp);
-  window.addEventListener("pointercancel", onPressUp);
+function beginPress(el: HTMLElement, x: number, y: number, touch: boolean): void {
+  clearDrag();
+  drag = { el, startX: x, startY: y, lastY: y, timer: 0, lifted: false, touch };
+  drag.timer = window.setTimeout(liftPress, LONG_PRESS_MS);
 }
 function liftPress(): void {
-  if (!press) return;
-  press.lifted = true;
-  press.el.classList.add("dragging");
+  if (!drag) return;
+  drag.lifted = true;
+  drag.el.classList.add("dragging");
   $("#finished-section").hidden = false; // reveal the (possibly empty) drop target
-  try {
-    press.el.setPointerCapture(press.pointerId); // keep events even when the finger leaves the row
-  } catch {
-    /* capture unsupported — still works via the window listeners */
-  }
-  navigator.vibrate?.(12); // a little "picked up" haptic where supported
+  navigator.vibrate?.(12); // "picked up" haptic where supported
+  startAutoScroll();
 }
-function onPressMove(e: PointerEvent): void {
-  if (!press || e.pointerId !== press.pointerId) return;
-  if (!press.lifted) {
-    // moved before the hold completed → it's a scroll or sloppy tap; abandon the pending lift
-    if (Math.abs(e.clientY - press.y) > PRESS_MOVE_CANCEL || Math.abs(e.clientX - press.x) > PRESS_MOVE_CANCEL) endPress(false);
-    return;
+/** Handle a move; returns true while actively dragging (so the touch handler preventDefaults scroll). */
+function pressMove(x: number, y: number): boolean {
+  if (!drag) return false;
+  if (!drag.lifted) {
+    const moved = Math.abs(y - drag.startY) > MOVE_CANCEL || Math.abs(x - drag.startX) > MOVE_CANCEL;
+    if (moved) {
+      if (drag.touch) clearDrag(); // a pre-hold move on touch = the user is scrolling; let them
+      else {
+        clearTimeout(drag.timer);
+        liftPress(); // mouse: a drag begins immediately on move
+      }
+    }
+    return drag?.lifted ?? false;
   }
-  e.preventDefault(); // we own the gesture now
+  drag.lastY = y;
+  reorderTo(y);
+  return true;
+}
+function reorderTo(y: number): void {
+  if (!drag) return;
   const finishedUl = $("#finished-list");
-  const overFinished = e.clientY >= $("#finished-section").getBoundingClientRect().top;
+  const overFinished = y >= $("#finished-section").getBoundingClientRect().top;
   finishedUl.classList.toggle("drag-over", overFinished);
   const list = overFinished ? finishedUl : $("#session-list");
-  const after = dragAfter(list, e.clientY);
-  if (after === null) list.appendChild(press.el);
-  else if (after !== press.el) list.insertBefore(press.el, after);
+  const after = dragAfter(list, y);
+  if (after === null) list.appendChild(drag.el);
+  else if (after !== drag.el) list.insertBefore(drag.el, after);
 }
-function onPressUp(e: PointerEvent): void {
-  if (!press || e.pointerId !== press.pointerId) return;
-  endPress(press.lifted); // commit iff we actually lifted
-}
-/** Tear down the press; `commit` true → persist the dropped order, false → restore from state. */
+/** End the gesture; `commit` true → persist the dropped order, false → restore from state. */
 function endPress(commit: boolean): void {
-  if (!press) return;
-  clearTimeout(press.timer);
-  press.el.classList.remove("dragging");
-  $("#finished-list").classList.remove("drag-over");
-  window.removeEventListener("pointermove", onPressMove);
-  window.removeEventListener("pointerup", onPressUp);
-  window.removeEventListener("pointercancel", onPressUp);
-  const lifted = press.lifted;
-  press = null;
+  const lifted = drag?.lifted ?? false;
+  clearDrag();
   if (lifted && commit) {
     commitOrderFromDom();
     justDragged = true;
-    setTimeout(() => (justDragged = false), 0); // swallow the trailing click on the dropped row
+    setTimeout(() => (justDragged = false), 350); // swallow the click the drop synthesizes
   } else if (lifted) {
     renderSessions(); // cancelled mid-drag → restore positions from state
   }
+}
+function clearDrag(): void {
+  if (!drag) return;
+  clearTimeout(drag.timer);
+  drag.el.classList.remove("dragging");
+  $("#finished-list").classList.remove("drag-over");
+  stopAutoScroll();
+  drag = null;
+}
+// While lifted, keep scrolling the list when the finger/cursor sits near an edge (even if held still).
+function startAutoScroll(): void {
+  const scroller = $("#session-scroll");
+  const EDGE = 48;
+  const step = (): void => {
+    if (!drag?.lifted) {
+      autoScrollRAF = 0;
+      return;
+    }
+    const r = scroller.getBoundingClientRect();
+    const y = drag.lastY;
+    if (y < r.top + EDGE && scroller.scrollTop > 0) {
+      scroller.scrollTop -= Math.ceil((r.top + EDGE - y) / 5);
+      reorderTo(y);
+    } else if (y > r.bottom - EDGE) {
+      scroller.scrollTop += Math.ceil((y - (r.bottom - EDGE)) / 5);
+      reorderTo(y);
+    }
+    autoScrollRAF = requestAnimationFrame(step);
+  };
+  autoScrollRAF = requestAnimationFrame(step);
+}
+function stopAutoScroll(): void {
+  if (autoScrollRAF) cancelAnimationFrame(autoScrollRAF);
+  autoScrollRAF = 0;
+}
+// Touch: start passively (a plain scroll stays fast); the document touchmove is non-passive so we can
+// cancel scrolling once the row is lifted.
+function onRowTouchStart(e: TouchEvent, el: HTMLElement): void {
+  lastTouchAt = Date.now();
+  if (e.touches.length !== 1 || (e.target as HTMLElement).closest(".row-btn")) return;
+  const t = e.touches[0];
+  beginPress(el, t.clientX, t.clientY, true);
+  document.addEventListener("touchmove", onDocTouchMove, { passive: false });
+  document.addEventListener("touchend", onDocTouchEnd);
+  document.addEventListener("touchcancel", onDocTouchCancel);
+}
+function onDocTouchMove(e: TouchEvent): void {
+  if (!drag) {
+    detachTouch();
+    return;
+  }
+  const t = e.touches[0];
+  if (!t) return;
+  if (pressMove(t.clientX, t.clientY)) e.preventDefault(); // own the gesture → block page scroll
+}
+function onDocTouchEnd(): void {
+  detachTouch();
+  endPress(true);
+}
+function onDocTouchCancel(): void {
+  detachTouch();
+  endPress(false);
+}
+function detachTouch(): void {
+  document.removeEventListener("touchmove", onDocTouchMove);
+  document.removeEventListener("touchend", onDocTouchEnd);
+  document.removeEventListener("touchcancel", onDocTouchCancel);
+}
+function onRowMouseDown(e: MouseEvent, el: HTMLElement): void {
+  if (e.button !== 0 || Date.now() - lastTouchAt < 700) return; // ignore the post-tap synthetic mousedown
+  if ((e.target as HTMLElement).closest(".row-btn")) return;
+  beginPress(el, e.clientX, e.clientY, false);
+  document.addEventListener("mousemove", onDocMouseMove);
+  document.addEventListener("mouseup", onDocMouseUp);
+}
+function onDocMouseMove(e: MouseEvent): void {
+  if (!drag) {
+    detachMouse();
+    return;
+  }
+  pressMove(e.clientX, e.clientY);
+}
+function onDocMouseUp(): void {
+  detachMouse();
+  endPress(true);
+}
+function detachMouse(): void {
+  document.removeEventListener("mousemove", onDocMouseMove);
+  document.removeEventListener("mouseup", onDocMouseUp);
 }
 /** The row to insert the dragged element before for pointer Y — or null to append. */
 function dragAfter(container: HTMLElement, y: number): HTMLElement | null {
