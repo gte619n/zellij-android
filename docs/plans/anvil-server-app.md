@@ -27,7 +27,7 @@ and shows its health.
 | SA-1 | Form | **Menu-bar agent app** (SwiftUI/`MenuBarExtra`) wrapping the headless daemon. Not a windowed app, not a DMG-of-a-GUI. |
 | SA-2 | Fleet join | **Managed from the app** via a pairing flow over the tailnet (hub pushes the shared token to a joiner that displays a code). |
 | SA-3 | Credential | **OAuth subscription token only** (`CLAUDE_CODE_OAUTH_TOKEN`). The app never collects or sets an API key (would meter billing — arch §3). |
-| SA-4 | Packaging | **Fully self-contained**: the `.app` embeds a compiled `anvild` + `web/dist`; installs/guides Tailscale. (Gated on the §3.1 compile spike; fallback = embed Bun + run from source.) |
+| SA-4 | Packaging | **Self-contained via embedded Bun + source + node_modules** (spike resolved — §3.1: full `--compile` doesn't boot due to runtime data-file deps; the SDK-spawn issue itself is solvable). The `.app` ships the daemon source + Bun + `web/dist` + the native `claude` CLI; installs/guides Tailscale. |
 
 ---
 
@@ -61,22 +61,33 @@ person may run both on the same Mac (it's the hub), but they're different layers
 
 Goal: double-click `Anvil Server.app`, get a running server in minutes, no terminal.
 
-### 3.1 The daemon binary (gating spike)
+### 3.1 The daemon binary — spike RESOLVED (2026-06-23)
 
-Preferred: **`bun build --compile`** → a single `anvild` binary, embedded in
-`Anvil Server.app/Contents/Resources/`. The app shells to it for `install`/`restart` instead of
-needing a git checkout + Bun on PATH.
+**Decision: embed Bun runtime + daemon source + `node_modules` (Fallback A), not a single
+`--compile` binary.** Run `test/tools/compile-spike.ts` to reproduce. Findings:
 
-**Prerequisite spike (gates SA-4):** the Agent SDK launches a child process (`claude` / `bun`) per
-turn. Confirm that survives `--compile` — i.e. the compiled binary can still spawn the SDK CLI and
-run a turn. If it can't:
-- **Fallback A:** embed the **Bun runtime** + the daemon **source** in Resources; the launcher runs
-  `bun run main.ts` from there. Larger bundle, no source-on-disk requirement for the user, known-good
-  spawn behavior.
-- Keep a `PtyBackend`-style seam so the choice is one place.
+1. **The Agent-SDK spawn under `--compile` is solvable** ✅. The SDK locates its CLI via
+   `import.meta.url` → `node_modules/@anthropic-ai/claude-agent-sdk-<platform>/claude`, which a
+   compiled binary lacks ("Native CLI binary for darwin-arm64 not found"). Shipping that native
+   `claude` binary (~216 MB, self-contained — **no `bun` needed**) and setting `ANVIL_CLI_PATH`
+   (→ `options.pathToClaudeCodeExecutable`, wired in `src/agent/cli.ts`) makes the compiled binary
+   spawn turns. *Verified: compiled spike + native CLI → a turn starts.*
+2. **But a naive full `--compile` of the daemon does NOT boot** ❌. Transitive deps load data files
+   at runtime that the bundler doesn't trace — first hit: `css-tree/data/patch.json` ("Cannot find
+   module … from /$bunfs/root"). With ~1650 modules, more such assets are likely; chasing each
+   (embed/external per file) is fragile and breaks as deps change.
+3. **So: ship Bun + source + `node_modules`.** This is *exactly what `service.sh` runs in production
+   today* (`bun run src/main.ts`), just relocated into `Anvil Server.app/Contents/Resources/`. No
+   asset-tracing problem, and with `node_modules` present the SDK resolves its own CLI normally
+   (`ANVIL_CLI_PATH` becomes optional). The launcher sets `ANVIL_WEB_DIR` to the bundled `web/dist`
+   (import.meta.dir-relative resolution would otherwise miss it) — also already wired.
 
-The `claude` CLI is needed for `setup-token` (login). The app bundles it (or the SDK's vendored CLI)
-so login works with nothing pre-installed.
+Daemon changes landed for either path (backward-compatible): `src/agent/cli.ts`
+(`claudeCliOptions()` → `executable:"bun"` in dev, `pathToClaudeCodeExecutable` when `ANVIL_CLI_PATH`
+set; used by `driver.ts` + `icon.ts`), and `ANVIL_WEB_DIR` override in `src/server/http.ts`.
+
+The `claude` CLI for `setup-token` (login) comes from the same shipped native binary / the SDK's
+vendored CLI, so login works with nothing pre-installed.
 
 ### 3.2 Tailscale
 
@@ -222,8 +233,9 @@ but keep the layers separate: Server.app = machine admin, client = session acces
 
 ## 9. Phased plan
 
-0. **Compile spike (gates SA-4):** does `bun build --compile` preserve the Agent-SDK child spawn?
-   Decides binary-embed vs Bun+source-embed (§3.1).
+0. **Compile spike (gates SA-4):** ✅ **done** (§3.1). Verdict: ship **Bun + source + node_modules**
+   (full `--compile` doesn't boot due to runtime data-file deps; the SDK-spawn issue is solvable on
+   its own). Daemon made packaging-ready: `ANVIL_CLI_PATH` (`src/agent/cli.ts`) + `ANVIL_WEB_DIR`.
 1. **Single-server wizard:** menu-bar app that does what `service.sh install` does — deps → login →
    guard → serve → LaunchAgent → health. (No fleet yet.) Replaces hand-setup for one Mac.
 2. **Pairing receiver + join:** the app's `:7702` listener, code UX, write-token-then-start (§4.2).
@@ -237,8 +249,9 @@ but keep the layers separate: Server.app = machine admin, client = session acces
 
 ## 10. Open questions / risks
 
-- **[gating] Compiled-binary Agent-SDK spawn** (§3.1) — decides packaging. Inherited from
-  multi-server §9.1.
+- ~~**[gating] Compiled-binary Agent-SDK spawn** (§3.1)~~ — **resolved** (2026-06-23): SDK spawn is
+  solvable (`ANVIL_CLI_PATH` → native CLI), but full `--compile` doesn't boot (runtime data-file
+  deps), so packaging is Bun + source + node_modules. See §3.1.
 - **Pairing direction & UX** — chosen: joiner shows code, hub approves (mirrors ADB). Confirm this
   reads naturally for "regular people" vs. the inverse.
 - **Pairing transport** — `tailscale serve --https=7702` for the window vs. binding the tailscale

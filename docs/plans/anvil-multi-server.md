@@ -203,10 +203,10 @@ Two audiences, two answers:
   invariant, runs `tailscale serve`, manages the LaunchAgent, and distributes the shared token across
   Macs. Full design: **`anvil-server-app.md`**. (The earlier "Not a DMG" note was about the *headless
   daemon* — still true; the DMG, if any, ships the *app* that wraps it.)
-- **Headless / Linux / CI:** keep the script path — `bun build --compile` → a single `anvild` binary
-  (verify the Agent-SDK child spawn survives compilation; fallback: embed Bun + run from source) +
-  `scripts/service.sh`/systemd. The Server.app owns the *same* on-disk artifacts as `service.sh` so
-  the two never diverge.
+- **Headless / Linux / CI:** keep the script path — run from source under Bun + `scripts/service.sh`
+  /systemd. (`bun build --compile` was evaluated and rejected for the daemon — runtime data-file deps
+  don't survive bundling; see `anvil-server-app.md` §3.1.) The Server.app owns the *same* on-disk
+  artifacts as `service.sh` so the two never diverge.
 
 First-run per machine (both paths): (a) the shared `CLAUDE_CODE_OAUTH_TOKEN`, (b) assert no API key,
 (c) `tailscale serve --https=7701`, (d) a server name. Bundle `web/dist` for the hub role.
@@ -234,10 +234,24 @@ it's allowed and not crippled. *(Do this before building the fleet UI.)*
    (`src/server/identity.ts`, protocol v0.7). The web client caches the identity from `server.hello`
    and groups the Settings → **Environments** tab under a per-server section header (one section
    today; one per server once federated). Backward-compatible; `PROTOCOL_VERSION` unchanged.
-2. **Client ConnectionManager + registry** — multi-socket, serverId-scoped state, add/remove servers, sidebar grouping. (Hub web app: widen CSP.) *(next)* — **discovery endpoint `GET /api/fleet/discover` already done** (§4.1, `src/server/fleet.ts`); the client still needs to call it + own the registry/sockets.
-3. **Aggregate budget gauge** — sum across servers + warning (§7 v1 mitigation).
-4. **Packaging** — `bun build --compile` binary + install script for easy rollout (§9).
-5. *(Eventual)* native multi-server client; shared budget ledger.
+2. **Client ConnectionManager + registry** — ✅ **done** (branch `multi-server-impl`). `web/src/main.ts`
+   now holds one `AnvilSocket` per server keyed by URL (hub implicit + an `anvil.servers` localStorage
+   registry); sessions/environments are tagged with their origin server (`sessionServer`/`envServer`,
+   persisted) and every session-scoped command + REST call routes back to the owning daemon. The
+   sidebar and Environments tab group by server with live status dots; "New session" derives its
+   server from the chosen environment; offline servers keep their cached sessions. CSP widened to
+   `https://*.ts.net wss://*.ts.net`. (seq/convo keys need no serverId prefix — session ids are
+   globally unique.) A headless smoke test (`test/tools/headless-smoke.ts`) guards the load path.
+3. **Discovery in the client** — ✅ **done**. Settings → Servers has an **Add a server** (URL, probed
+   via `/api/health`) and **Discover on tailnet** (calls the hub's `/api/fleet/discover`, one-tap add).
+4. **Aggregate budget gauge** — ✅ **done**. Per-server budget lines + an "Account usage" gauge in the
+   Servers tab (the *highest* utilization any server reports — the real account ceiling, since all
+   servers share one account; not a sum — §7) with an ⚠ warning.
+   - **Still hub-scoped (follow-ups):** web-push/FCM registration and the "Update Anvil" button act on
+     the hub only; updating other servers is a Server.app concern (Track B), and per-server push needs
+     subscribing on each daemon.
+5. **Packaging** — Anvil Server.app (Bun + source + node_modules; compile-spike resolved) for the fleet path; `service.sh`/systemd for headless (§9 / `anvil-server-app.md`).
+6. *(Eventual)* native multi-server client; shared budget ledger.
 
 ---
 
@@ -245,6 +259,8 @@ it's allowed and not crippled. *(Do this before building the fleet UI.)*
 
 - **[gating] One Max token across machines** — allowed? throttled? (§11.0). Everything else assumes yes.
 - **Aggregate budget** — per-server soft-stop can't see account-wide usage until a ledger exists (§7).
-- **Compiled-binary Agent-SDK spawn** — confirm the SDK's child-process launch survives `bun --compile` (§9.1).
+- ~~**Compiled-binary Agent-SDK spawn**~~ — **resolved** (`anvil-server-app.md` §3.1): SDK spawn is
+  solvable via `ANVIL_CLI_PATH` → the native CLI, but full `bun --compile` of the daemon doesn't boot
+  (runtime data-file deps, e.g. `css-tree/data/patch.json`), so packaging is Bun + source + node_modules.
 - **Hub availability** — the web hub needs *a* server up to load the UI; mitigated by any node being able to host it. A native client removes this entirely.
 - **Cross-node cert trust** — relies on Tailscale per-node HTTPS certs; verify in-browser `wss://*.ts.net` connects without prompts.
