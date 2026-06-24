@@ -253,6 +253,41 @@ export function dispatch(conn: ConnState, raw: string, send: Send, deps: Dispatc
           .catch((e) => send(cmdError(errMsg(e), cid)));
         return;
 
+      case "autopilot.plans.list":
+        send(deps.supervisor.autopilotPlansEvent(cid));
+        return;
+
+      case "autopilot.refine":
+        deps.supervisor
+          .refinePlan(cmd.workUnitId, cmd.feedback, cid)
+          .then((event) => send(event))
+          .catch((e) => send(cmdError(errMsg(e), cid)));
+        return;
+
+      case "autopilot.dismiss":
+        deps.supervisor
+          .dismissPlan(cmd.workUnitId)
+          .then(() => {
+            if (cid) send(ack(cid));
+          })
+          .catch((e) => send(cmdError(errMsg(e), cid)));
+        return;
+
+      case "autopilot.start":
+        send(deps.supervisor.startPlan(cmd.workUnitId, cmd.model, cmd.autonomy, cid));
+        return;
+
+      case "autopilot.run":
+        deps.supervisor
+          .runAutopilot({
+            environmentId: cmd.environmentId,
+            notify: false, // interactive run — the open screen updates live; push is for nightly runs
+            onProgress: (line) => deps.registry.toAll({ v: PROTOCOL_VERSION, type: "autopilot.run.progress", ts: now(), line }),
+          })
+          .then((r) => send({ v: PROTOCOL_VERSION, type: "autopilot.run.result", ts: now(), cid, ok: true, created: r.created, skipped: r.skipped, output: r.output }))
+          .catch((e) => send({ v: PROTOCOL_VERSION, type: "autopilot.run.result", ts: now(), cid, ok: false, created: 0, skipped: 0, output: errMsg(e) }));
+        return;
+
       case "fs.list": {
         const r = deps.supervisor.fsList(cmd.sessionId, cmd.path);
         send({ v: PROTOCOL_VERSION, type: "fs.list.result", ts: now(), cid, sessionId: cmd.sessionId, path: r.path, entries: r.entries });

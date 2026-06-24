@@ -19,6 +19,7 @@ const b64ToBytes = (b64: string): Uint8Array => {
 };
 import type {
   AttachmentRef,
+  AutopilotPlanInfo,
   AutonomyPolicy,
   Budget,
   ContentBlock,
@@ -126,6 +127,10 @@ const hostOf = (url: string): string => {
 const servers = new Map<string, Server>(); // keyed by url
 const sessionServer = new Map<string, string>(); // sessionId → server url (outbound routing)
 const envServer = new Map<string, string>(); // environmentId → server url (grouping/routing)
+// Autopilot pending plans, tagged by the server they arrived from (anvil-autopilot-ui.md). Declared
+// up here with the other early-init routing state so a lower declaration can't TDZ-crash module init.
+const serverPlans = new Map<string, AutopilotPlanInfo[]>(); // server url → its pending plans
+const planServer = new Map<string, string>(); // workUnitId → server url (route refine/dismiss/start)
 (function hydrateRouting() {
   try {
     for (const [k, v] of JSON.parse(localStorage.getItem("anvil.sessionServer") ?? "[]") as [string, string][]) sessionServer.set(k, v);
@@ -191,6 +196,9 @@ function removeServer(url: string): void {
   servers.delete(url);
   for (const [sid, u] of [...sessionServer]) if (u === url) { sessionServer.delete(sid); sessions.delete(sid); }
   for (const [eid, u] of [...envServer]) if (u === url) { envServer.delete(eid); environments.delete(eid); }
+  serverPlans.delete(url);
+  for (const [pid, u] of [...planServer]) if (u === url) planServer.delete(pid);
+  updateAutopilotBadge();
   saveExtraServers([...servers.keys()].filter((u) => u !== HUB_URL));
   persistSessions();
   persistEnvironments();
@@ -268,7 +276,7 @@ const sessionFromHash = (): string | null => {
 // uses the swipe gesture, the PWA/browser uses its own Back — all surface as `popstate`,
 // which closes the topmost layer. Each entry records how many layers were open (`anvilDepth`)
 // so a single popstate can unwind to exactly the right place.
-type OverlayName = "modal" | "settings" | "panel" | "sidebar";
+type OverlayName = "modal" | "settings" | "autopilot" | "panel" | "sidebar";
 interface Overlay {
   name: OverlayName;
   close: () => void; // pure DOM/state teardown — must NOT touch history itself
@@ -680,7 +688,10 @@ function onStatus(url: string, status: "connecting" | "connected" | "disconnecte
   updateOutboxBadge();
   renderSessions(); // per-server status dots in the group headers
   if (document.querySelector(".settings-view")) renderServerCards(); // live status in Settings
-  if (status === "connected") void flushOutbox(); // push anything queued while offline (routed per server)
+  if (status === "connected") {
+    void flushOutbox(); // push anything queued while offline (routed per server)
+    srv?.sock.send({ type: "autopilot.plans.list" }); // keep the sidebar badge + grid live for this server
+  }
   if (pendingRestartReload && url === HUB_URL) {
     if (status === "disconnected") setUpdateStatus("Daemon is restarting…");
     else if (status === "connected") {
@@ -795,6 +806,18 @@ function onEvent(url: string, e: ServerEvent): void {
       return;
     case "todoist.projects.result":
       return; // resolved via cidWaiter (loadTodoistProjects)
+    case "autopilot.plans":
+      onAutopilotPlans(url, e.plans);
+      return;
+    case "autopilot.plan":
+      return; // resolved via cidWaiter (refinePlan); the matching autopilot.plans broadcast refreshes state
+    case "autopilot.started":
+      return; // resolved via cidWaiter (startPlan)
+    case "autopilot.run.result":
+      return; // resolved via cidWaiter (runAutopilot)
+    case "autopilot.run.progress":
+      onAutopilotProgress(e.line);
+      return;
     case "dirs.list.result":
       onDirs?.(e);
       return;
@@ -1842,6 +1865,314 @@ function renderTodoistPanel(): void {
 function closeSettings(): void {
   $("#settings-root").innerHTML = "";
 }
+// ── Autopilot (plan review & launch; anvil-autopilot-ui.md) ────────────────────────
+const autopilotLog: string[] = []; // streamed progress lines for the current/last run
+let openPlanId: string | null = null; // the plan open in the reader, if any (else the grid is shown)
+const SIZE_LABEL: Record<string, string> = { xs: "XS", s: "S", m: "M", l: "L", xl: "XL" };
+
+/** Every server's pending plans, hub first, in the sidebar/grouping order. */
+function allPlans(): AutopilotPlanInfo[] {
+  return orderedServers().flatMap((s) => serverPlans.get(s.url) ?? []);
+}
+function pendingPlanCount(): number {
+  let n = 0;
+  for (const list of serverPlans.values()) n += list.length;
+  return n;
+}
+function findPlan(id: string): AutopilotPlanInfo | undefined {
+  for (const list of serverPlans.values()) {
+    const p = list.find((x) => x.id === id);
+    if (p) return p;
+  }
+  return undefined;
+}
+function updateAutopilotBadge(): void {
+  const badge = document.getElementById("autopilot-badge");
+  if (!badge) return;
+  const n = pendingPlanCount();
+  badge.textContent = n ? String(n) : "";
+  badge.hidden = n === 0;
+}
+/** A server delivered its pending plans: re-tag routing, refresh the badge and (if open) the view. */
+function onAutopilotPlans(url: string, plans: AutopilotPlanInfo[]): void {
+  serverPlans.set(url, plans);
+  for (const [pid, u] of [...planServer]) if (u === url) planServer.delete(pid);
+  for (const p of plans) planServer.set(p.id, url);
+  updateAutopilotBadge();
+  if (!document.querySelector(".autopilot-view")) return;
+  // A reader open on a plan that just vanished (dismissed/started elsewhere) falls back to the grid;
+  // otherwise leave an open reader untouched (refine updates it in place) and only re-flow the grid.
+  if (openPlanId) {
+    if (!findPlan(openPlanId)) renderAutopilotGrid();
+  } else {
+    renderAutopilotGrid();
+  }
+}
+function onAutopilotProgress(line: string): void {
+  autopilotLog.push(line);
+  const log = document.getElementById("autopilot-log");
+  if (log) {
+    log.hidden = false;
+    log.textContent = autopilotLog.join("\n");
+    log.scrollTop = log.scrollHeight;
+  }
+}
+
+function openAutopilot(): void {
+  const root = $("#autopilot-root");
+  root.innerHTML = `<div class="autopilot-view">
+    <div class="settings-head">
+      <h2>${icon("bolt")} Autopilot</h2>
+      <span class="ap-head-actions">
+        <button id="autopilot-run" class="primary">${icon("play_arrow")} Run autopilot</button>
+        <button id="autopilot-close" class="icon-btn" title="Close">${icon("close")}</button>
+      </span>
+    </div>
+    <pre class="git-output ap-log" id="autopilot-log" hidden></pre>
+    <div class="settings-body"><div id="autopilot-grid"></div></div>
+  </div>`;
+  $("#autopilot-close").addEventListener("click", () => dismissOverlay("autopilot"));
+  $("#autopilot-run").addEventListener("click", () => void runAutopilot());
+  if (autopilotLog.length) {
+    const log = $("#autopilot-log");
+    log.hidden = false;
+    log.textContent = autopilotLog.join("\n");
+  }
+  openOverlay("autopilot", closeAutopilot); // Back closes it (no-op if it's already a layer)
+  renderAutopilotGrid();
+  for (const s of orderedServers()) if (s.sock.isOpen()) s.sock.send({ type: "autopilot.plans.list" }); // fresh pull
+}
+/** Tear down the autopilot view (DOM only). Reached via Back (popstate) or dismissOverlay. */
+function closeAutopilot(): void {
+  openPlanId = null;
+  $("#autopilot-root").innerHTML = "";
+}
+
+function planCardHtml(p: AutopilotPlanInfo): string {
+  const env = p.environmentName ?? (p.environmentId ? environments.get(p.environmentId)?.name : undefined);
+  const summary = p.summary ?? p.rationale ?? "";
+  const eff = p.effort
+    ? `<span class="ap-chip eff-${p.effort.size}">${SIZE_LABEL[p.effort.size] ?? p.effort.size}${p.effort.filesTouched != null ? ` · ${p.effort.filesTouched} file${p.effort.filesTouched === 1 ? "" : "s"}` : ""}</span>`
+    : "";
+  return `<button class="plan-card" data-id="${esc(p.id)}">
+    <span class="plan-title">${esc(p.title)}</span>
+    ${summary ? `<span class="plan-summary">${esc(summary)}</span>` : ""}
+    <span class="plan-meta">
+      ${env ? `<span class="ap-chip">${icon("folder")}${esc(env)}</span>` : ""}
+      <span class="ap-chip">${icon("checklist")}${p.taskCount}</span>
+      ${eff}
+      <span class="ap-chip status-${esc(p.status)}">${esc(p.status)}</span>
+    </span>
+  </button>`;
+}
+/** The flowing card grid, grouped by server when the fleet has more than one. */
+function renderAutopilotGrid(): void {
+  openPlanId = null;
+  const host = document.getElementById("autopilot-grid");
+  if (!host) return;
+  const multi = orderedServers().length > 1;
+  if (pendingPlanCount() === 0) {
+    host.innerHTML = `<div class="ap-empty">${icon("inbox")}
+      <p>No pending plans.</p>
+      <p class="small muted">Link a Todoist project to an environment in Settings, then <b>Run autopilot</b> to generate plans.</p></div>`;
+    return;
+  }
+  let html = "";
+  for (const srv of orderedServers()) {
+    const list = serverPlans.get(srv.url) ?? [];
+    if (multi) html += `<div class="ap-server-sep"><span class="conn-dot ${srv.status}"></span>${esc(srv.name)}</div>`;
+    if (!list.length) {
+      if (multi) html += `<p class="small muted ap-server-empty">No plans</p>`;
+      continue;
+    }
+    html += `<div class="plan-grid">${list.map(planCardHtml).join("")}</div>`;
+  }
+  host.innerHTML = html;
+  host.querySelectorAll<HTMLElement>(".plan-card").forEach((c) =>
+    c.addEventListener("click", () => openPlan(c.dataset.id!)),
+  );
+}
+
+/** The full-plan reader + refine chat + Dismiss/Go, rendered in place of the grid (same overlay). */
+function openPlan(id: string): void {
+  const p = findPlan(id);
+  const host = document.getElementById("autopilot-grid");
+  if (!p || !host) return;
+  openPlanId = id;
+  const env = p.environmentName ?? (p.environmentId ? environments.get(p.environmentId)?.name : undefined);
+  host.innerHTML = `<div class="plan-reader" data-id="${esc(id)}">
+    <div class="plan-reader-head">
+      <button class="mini" id="plan-back">${icon("arrow_back")} All plans</button>
+      <span class="plan-reader-title">${esc(p.title)}${env ? ` <span class="small muted">· ${esc(env)}</span>` : ""}</span>
+      <span class="plan-reader-actions">
+        <button class="mini danger" id="plan-dismiss">${icon("close")} Dismiss</button>
+        <button class="primary" id="plan-start">${icon("rocket_launch")} Create session &amp; start</button>
+      </span>
+    </div>
+    <div class="plan-reader-body">
+      <article class="md plan-doc" id="plan-doc">${p.plan?.html ?? "<p class='muted'>No plan content.</p>"}</article>
+      <aside class="plan-refine">
+        <h4>${icon("auto_awesome")} Refine with Claude</h4>
+        <p class="small muted">Suggest a change; Claude rewrites the plan and saves it back to Todoist.</p>
+        <div id="plan-refine-log" class="plan-refine-log"></div>
+        <form id="plan-refine-form" class="plan-refine-form">
+          <textarea id="plan-refine-input" rows="2" placeholder="e.g. also cover the offline case, and keep the existing API"></textarea>
+          <button type="submit" class="primary" id="plan-refine-send" title="Send">${icon("send")}</button>
+        </form>
+      </aside>
+    </div>
+  </div>`;
+  $("#plan-back").addEventListener("click", () => renderAutopilotGrid());
+  $("#plan-dismiss").addEventListener("click", () => void dismissPlan(id));
+  $("#plan-start").addEventListener("click", () => void startPlan(id));
+  $("#plan-refine-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    void refinePlan(id);
+  });
+}
+
+/** The server that owns a plan (refine/dismiss/start route there), or undefined if offline/unknown. */
+function planSock(id: string): Server | undefined {
+  const url = planServer.get(id);
+  return url ? servers.get(url) : undefined;
+}
+
+async function refinePlan(id: string): Promise<void> {
+  const input = $<HTMLTextAreaElement>("#plan-refine-input");
+  const feedback = input.value.trim();
+  if (!feedback) return;
+  const srv = planSock(id);
+  if (!srv?.sock.isOpen()) {
+    toast("That plan's server is offline");
+    return;
+  }
+  const log = $("#plan-refine-log");
+  log.insertAdjacentHTML("beforeend", `<div class="rf-msg rf-you">${esc(feedback)}</div>`);
+  const pending = document.createElement("div");
+  pending.className = "rf-msg rf-claude rf-pending";
+  pending.innerHTML = `<span class="dots"><i></i><i></i><i></i></span> Refining…`;
+  log.appendChild(pending);
+  log.scrollTop = log.scrollHeight;
+  input.value = "";
+  const send = $<HTMLButtonElement>("#plan-refine-send");
+  send.disabled = true;
+  try {
+    const res = await sendAwait(srv, { type: "autopilot.refine", workUnitId: id, feedback, cid: newCid() }, 180_000);
+    if (res.type === "command.error") {
+      pending.className = "rf-msg rf-claude rf-err";
+      pending.textContent = res.message;
+      return;
+    }
+    if (res.type !== "autopilot.plan") return;
+    pending.className = "rf-msg rf-claude";
+    pending.textContent = "Updated the plan.";
+    const doc = document.getElementById("plan-doc");
+    if (doc && res.plan.plan) doc.innerHTML = res.plan.plan.html;
+  } catch (err) {
+    pending.className = "rf-msg rf-claude rf-err";
+    pending.textContent = `Refine failed: ${err instanceof Error ? err.message : String(err)}`;
+  } finally {
+    if (document.getElementById("plan-refine-send")) send.disabled = false;
+  }
+}
+
+async function dismissPlan(id: string): Promise<void> {
+  const p = findPlan(id);
+  const ok = await confirmDialog({
+    title: "Dismiss this plan?",
+    body: `“${p?.title ?? "This plan"}” will be removed and its Todoist tasks labelled anvil:dismissed, so the nightly run won't re-plan them.`,
+    confirmLabel: "Dismiss",
+    danger: true,
+    icon: "close",
+  });
+  if (!ok) return;
+  const srv = planSock(id);
+  if (!srv?.sock.isOpen()) {
+    toast("That plan's server is offline");
+    return;
+  }
+  try {
+    const res = await sendAwait(srv, { type: "autopilot.dismiss", workUnitId: id, cid: newCid() }, 60_000);
+    if (res.type === "command.error") {
+      toast(res.message);
+      return;
+    }
+    toast("Plan dismissed");
+    renderAutopilotGrid(); // the broadcast also refreshes, but don't wait on it
+  } catch (err) {
+    toast(`Dismiss failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function startPlan(id: string): Promise<void> {
+  const srv = planSock(id);
+  if (!srv?.sock.isOpen()) {
+    toast("That plan's server is offline");
+    return;
+  }
+  const btn = document.getElementById("plan-start") as HTMLButtonElement | null;
+  const reset = (): void => {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `${icon("rocket_launch")} Create session & start`;
+    }
+  };
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${icon("hourglass_empty")} Starting…`;
+  }
+  try {
+    const res = await sendAwait(srv, { type: "autopilot.start", workUnitId: id, cid: newCid() }, 60_000);
+    if (res.type === "command.error") {
+      toast(res.message);
+      reset();
+      return;
+    }
+    if (res.type !== "autopilot.started") {
+      reset();
+      return;
+    }
+    // The session.created broadcast arrives before this reply, so the session is already registered.
+    dismissOverlay("autopilot");
+    selectSession(res.sessionId);
+  } catch (err) {
+    toast(`Couldn't start: ${err instanceof Error ? err.message : String(err)}`);
+    reset();
+  }
+}
+
+/** Re-plan linked Todoist projects on every connected server; stream progress into the log. */
+async function runAutopilot(): Promise<void> {
+  const targets = orderedServers().filter((s) => s.sock.isOpen());
+  if (!targets.length) {
+    toast("No connected servers");
+    return;
+  }
+  autopilotLog.length = 0;
+  onAutopilotProgress("Running autopilot…");
+  const btn = $<HTMLButtonElement>("#autopilot-run");
+  btn.disabled = true;
+  btn.innerHTML = `${icon("hourglass_empty")} Running…`;
+  let created = 0;
+  try {
+    for (const srv of targets) {
+      try {
+        const res = await sendAwait(srv, { type: "autopilot.run", cid: newCid() }, 600_000);
+        if (res.type === "autopilot.run.result") {
+          created += res.created;
+          onAutopilotProgress(res.ok ? `✓ ${srv.name}: ${res.created} new · ${res.skipped} already in pipeline` : `⚠ ${srv.name}: ${res.output}`);
+        }
+      } catch (err) {
+        onAutopilotProgress(`⚠ ${srv.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    toast(created ? `${created} new plan${created === 1 ? "" : "s"}` : "No new plans");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `${icon("play_arrow")} Run autopilot`;
+  }
+}
+
 /** One card per server in the fleet (hub first): live status, version, budget, and remove. */
 function serverCardHtml(srv: Server): string {
   const isHub = srv.url === HUB_URL;
@@ -2862,9 +3193,9 @@ document.querySelectorAll<HTMLElement>(".ptab").forEach((t) => t.addEventListene
 // handlers' click.
 document.addEventListener("pointerdown", (e) => {
   if (!panelView) return; // panel already closed
-  if (overlayOpen("modal") || overlayOpen("settings")) return; // a dialog/settings is on top — leave the panel be
+  if (overlayOpen("modal") || overlayOpen("settings") || overlayOpen("autopilot")) return; // a dialog/settings/autopilot is on top — leave the panel be
   const t = e.target as HTMLElement;
-  if (t.closest("#side-panel") || t.closest("#header") || t.closest(".file-link") || t.closest("#quote-btn") || t.closest("#modal-root") || t.closest("#settings-root")) return;
+  if (t.closest("#side-panel") || t.closest("#header") || t.closest(".file-link") || t.closest("#quote-btn") || t.closest("#modal-root") || t.closest("#settings-root") || t.closest("#autopilot-root")) return;
   closePanel();
 });
 
@@ -2876,6 +3207,7 @@ const browseServer = (): Server => servers.get(browse.serverUrl) ?? hub();
 
 initSortables(); // wire up drag-to-reorder on the (always-present) session + finished lists
 $("#open-settings").addEventListener("click", openSettings);
+$("#open-autopilot").addEventListener("click", openAutopilot);
 
 /** Mount a modal (replaces any current one in #modal-root) and register it on the back-stack so
  *  Back/Cancel dismisses it. Swapping one modal's contents for another reuses the same layer. */

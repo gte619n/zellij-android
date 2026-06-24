@@ -371,6 +371,67 @@ export interface TodoistProjectsResultEvent extends Envelope {
   cid?: Cid;
   projects: TodoistProjectInfo[];
 }
+
+// ── Autopilot (task-autopilot plan review UI; see anvil-autopilot-ui.md) ──────────────
+/** Rough size estimate the planner emits for a work unit; surfaced on the Autopilot card. */
+export type AutopilotSize = "xs" | "s" | "m" | "l" | "xl";
+export interface AutopilotEffort {
+  size: AutopilotSize;
+  filesTouched?: number; // the planner's guess at how many files the unit touches
+}
+/** The anvil autopilot's status, mirrored from the `anvil:*` Todoist labels. Kept in lockstep with
+ *  STATUSES in src/integrations/status.ts (the server is the source of truth). */
+export type AnvilStatus = "planned" | "building" | "review" | "blocked" | "dismissed";
+/** A pending (or just-started) autopilot work unit, shaped for the Autopilot card grid + reader. */
+export interface AutopilotPlanInfo {
+  id: string; // WorkUnit id
+  environmentId: string;
+  environmentName?: string;
+  todoistProjectId: string;
+  title: string;
+  rationale?: string;
+  summary?: string; // 1–2 line description for the card
+  status: AnvilStatus;
+  effort?: AutopilotEffort;
+  taskCount: number; // Todoist tasks bundled into the unit
+  plan?: RenderedMarkdown; // full implementation plan (source + sanitized HTML) for the reader
+  createdAt: Iso8601;
+  updatedAt: Iso8601;
+}
+/** The server's pending plans — answer to `autopilot.plans.list` (carries cid), and broadcast (no cid)
+ *  whenever the set changes (a run plans new units, a refine updates one, a dismiss/start removes one). */
+export interface AutopilotPlansEvent extends Envelope {
+  type: "autopilot.plans";
+  cid?: Cid;
+  plans: AutopilotPlanInfo[];
+}
+/** One updated plan — the result of `autopilot.refine` (carries cid). */
+export interface AutopilotPlanResultEvent extends Envelope {
+  type: "autopilot.plan";
+  cid?: Cid;
+  plan: AutopilotPlanInfo;
+}
+/** The session a Go (`autopilot.start`) created to implement a plan. */
+export interface AutopilotStartedEvent extends Envelope {
+  type: "autopilot.started";
+  cid?: Cid;
+  workUnitId: string;
+  sessionId: SessionId;
+}
+/** A streamed progress line from an in-flight `autopilot.run` (broadcast so every open screen follows). */
+export interface AutopilotRunProgressEvent extends Envelope {
+  type: "autopilot.run.progress";
+  line: string;
+}
+/** Final summary of an `autopilot.run` (carries cid). */
+export interface AutopilotRunResultEvent extends Envelope {
+  type: "autopilot.run.result";
+  cid?: Cid;
+  ok: boolean;
+  created: number; // new work units planned
+  skipped: number; // tasks already in the pipeline
+  output: string; // human-readable log (or the error message when ok=false)
+}
 /** Result of a git/gh operation (arch §8) — carries combined output for display. */
 export type GitOp = "status" | "diff" | "commit" | "push" | "create-pr" | "merge-pr";
 export interface GitResultEvent extends Envelope {
@@ -535,6 +596,11 @@ export type ServerEvent =
   | EnvironmentsEvent
   | TodoistStatusEvent
   | TodoistProjectsResultEvent
+  | AutopilotPlansEvent
+  | AutopilotPlanResultEvent
+  | AutopilotStartedEvent
+  | AutopilotRunProgressEvent
+  | AutopilotRunResultEvent
   | GitResultEvent
   | DaemonUpdateResultEvent
   | AckEvent
@@ -737,6 +803,31 @@ export interface TodoistProjectsListCmd extends Envelope, Correlated {
   type: "todoist.projects.list"; // fetch the account's projects (live from the API)
 }
 
+// Autopilot plan review (anvil-autopilot-ui.md). These drive the Autopilot section: list/refine/
+// dismiss pending plans, launch one into a worktree session, or re-plan the linked projects.
+export interface AutopilotPlansListCmd extends Envelope, Correlated {
+  type: "autopilot.plans.list"; // this server's pending plans → autopilot.plans
+}
+export interface AutopilotRefineCmd extends Envelope, Correlated {
+  type: "autopilot.refine"; // Claude rewrites the plan from the user's feedback → autopilot.plan
+  workUnitId: string;
+  feedback: string;
+}
+export interface AutopilotDismissCmd extends Envelope, Correlated {
+  type: "autopilot.dismiss"; // reject a plan: label its tasks anvil:dismissed, drop the card
+  workUnitId: string;
+}
+export interface AutopilotStartCmd extends Envelope, Correlated {
+  type: "autopilot.start"; // create a worktree session seeded with the plan and start it → autopilot.started
+  workUnitId: string;
+  model?: Model; // defaults to "opus"
+  autonomy?: AutonomyPolicy; // defaults to "bypass" (auto-start working without permission stalls)
+}
+export interface AutopilotRunCmd extends Envelope, Correlated {
+  type: "autopilot.run"; // re-plan linked Todoist projects on this server → autopilot.run.result
+  environmentId?: string; // limit to one environment; omitted = every linked environment
+}
+
 // Daemon self-management. `daemon.update` pulls the daemon's own source repo, rebuilds the web
 // bundle, and (when running under the launchd service) restarts itself to apply the new code.
 export interface DaemonUpdateCmd extends Envelope, Correlated {
@@ -813,6 +904,11 @@ export type ClientCommand =
   | EnvRemoveCmd
   | TodoistStatusCmd
   | TodoistProjectsListCmd
+  | AutopilotPlansListCmd
+  | AutopilotRefineCmd
+  | AutopilotDismissCmd
+  | AutopilotStartCmd
+  | AutopilotRunCmd
   | DaemonUpdateCmd
   // terminal
   | TerminalOpenCmd
