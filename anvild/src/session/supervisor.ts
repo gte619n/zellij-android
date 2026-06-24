@@ -32,7 +32,7 @@ import { newId } from "../util/ids";
 import type { ConnectionRegistry } from "../server/registry";
 import { Session } from "./session";
 import { SessionStore } from "./store";
-import { createWorktree, gitStatus, recreateWorktree, removeWorktree, worktreeHealth } from "./worktree";
+import { carryPrBadge, createWorktree, gitStatus, prBadgeFor, recreateWorktree, removeWorktree, worktreeHealth } from "./worktree";
 import { AgentDriver, type TurnUsage } from "../agent/driver";
 import { buildDefaultToolsServer, DEFAULT_MCP_SERVER_NAME, DEFAULT_TOOL_IDS } from "../agent/default-tools";
 import { buildAgentEnv } from "../agent/env";
@@ -467,11 +467,13 @@ export class Supervisor {
         this.refreshGit(s);
         if (s.data.git) {
           const pr = git.prStatus(cwd); // network: gh pr view
-          s.data.git.prState = pr.state;
-          s.data.git.prUrl = pr.url;
+          const badge = prBadgeFor(pr.state, pr.url, s.data.git.branch, s.data.git.dirtyFileCount);
+          s.data.git.prState = badge.prState; // badge is branch-scoped, and merged hides on a dirty tree
+          s.data.git.prUrl = badge.prUrl;
+          s.data.git.prBranch = badge.prBranch;
           this.persist();
           this.broadcastUpdated(s.data);
-          output = `${s.data.git.branch} — ${s.data.git.dirtyFileCount} changed, ${s.data.git.ahead} ahead / ${s.data.git.behind} behind${pr.state ? ` · PR ${pr.state}` : ""}`;
+          output = `${s.data.git.branch} — ${s.data.git.dirtyFileCount} changed, ${s.data.git.ahead} ahead / ${s.data.git.behind} behind${s.data.git.prState ? ` · PR ${s.data.git.prState}` : ""}`;
         } else {
           output = "(not a git repo)";
         }
@@ -509,8 +511,16 @@ export class Supervisor {
         ok = r.ok;
         output = r.output;
         if (r.ok) {
+          const mergedBranch = s.data.git?.branch ?? branch; // the branch we just merged (before any refresh)
           this.refreshGit(s); // branch may be gone after --delete-branch; refresh dirty/ahead too
-          if (s.data.git) s.data.git.prState = "merged"; // mark done → the session list shows a merged badge
+          if (s.data.git) {
+            // Show the merged badge (scoped to the merged branch so later work clears it) unless the
+            // tree already has uncommitted work — then it's no longer cleanly merged. See prBadgeFor.
+            const badge = prBadgeFor("merged", s.data.git.prUrl, mergedBranch, s.data.git.dirtyFileCount);
+            s.data.git.prState = badge.prState;
+            s.data.git.prUrl = badge.prUrl;
+            s.data.git.prBranch = badge.prBranch;
+          }
           this.persist();
           this.broadcastUpdated(s.data);
         }
@@ -522,13 +532,15 @@ export class Supervisor {
   private refreshGit(s: Session): void {
     const g = gitStatus(s.data.cwd);
     if (g) {
-      // gitStatus() is local-only; carry the PR state we learned from gh across refreshes so a
-      // known "merged"/"open" (and the session-list badge) doesn't flicker away on the next commit.
-      g.prState = s.data.git?.prState;
-      g.prUrl = s.data.git?.prUrl;
+      // gitStatus() is local-only; carry the PR badge learned from gh across refreshes — but it
+      // clears once work moves to a new branch, or (for a merged PR) once the tree is dirty again.
+      Object.assign(g, carryPrBadge(s.data.git, g));
+      const changed = JSON.stringify(s.data.git) !== JSON.stringify(g);
       s.data.git = g;
-      this.persist();
-      this.broadcastUpdated(s.data);
+      if (changed) {
+        this.persist();
+        this.broadcastUpdated(s.data);
+      }
     }
   }
   /** Best-effort, non-blocking PR-state refresh (network via gh), called on attach so a PR merged
@@ -536,13 +548,21 @@ export class Supervisor {
    *  merged (terminal) or without a branch, so the common case costs nothing. */
   async refreshPrState(id: string): Promise<void> {
     const s = this.sessions.get(id);
-    if (!s?.data.git || s.data.git.prState === "merged") return;
-    if (!s.data.worktree?.branch && !s.data.git.branch) return;
+    if (!s) return;
+    this.refreshGit(s); // local: pick up a branch switch / new changes and clear a stale badge first
+    const g = s.data.git;
+    if (!g) return;
+    // A merged PR is terminal — skip the gh probe only while we're still on the branch it merged.
+    if (g.prState === "merged" && g.prBranch === g.branch) return;
+    if (!s.data.worktree?.branch && !g.branch) return;
     const pr = await git.prStatusAsync(s.data.cwd);
     const cur = this.sessions.get(id); // may have changed/closed during the await
-    if (!cur?.data.git || (cur.data.git.prState === pr.state && cur.data.git.prUrl === pr.url)) return;
-    cur.data.git.prState = pr.state;
-    cur.data.git.prUrl = pr.url;
+    if (!cur?.data.git) return;
+    const badge = prBadgeFor(pr.state, pr.url, cur.data.git.branch, cur.data.git.dirtyFileCount);
+    if (cur.data.git.prState === badge.prState && cur.data.git.prUrl === badge.prUrl && cur.data.git.prBranch === badge.prBranch) return;
+    cur.data.git.prState = badge.prState;
+    cur.data.git.prUrl = badge.prUrl;
+    cur.data.git.prBranch = badge.prBranch;
     this.persist();
     this.broadcastUpdated(cur.data);
   }
@@ -976,6 +996,11 @@ export class Supervisor {
   /** Per-turn: refresh the shared rate-limit gauge from the real plan windows, broadcast it, and
    *  advise once when the weekly window nears the cap. */
   private onAgentResult(sessionId: string, usage: TurnUsage): void {
+    // The agent may have committed, switched/created a branch, or left new changes this turn —
+    // refresh git so the worktree panel and session-list badge stay current without a manual
+    // "status" press. Local-only and a no-op (no broadcast) when nothing changed.
+    const s = this.sessions.get(sessionId);
+    if (s) this.refreshGit(s);
     const { budget, crossedSoftStop } = this.rateLimits.update(usage.rateLimits, usage.subscriptionType);
     this.registry.toAll({ v: PROTOCOL_VERSION, type: "budget", ts: now(), budget });
     if (crossedSoftStop) {
