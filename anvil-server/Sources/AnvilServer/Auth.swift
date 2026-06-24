@@ -22,7 +22,9 @@ enum Auth {
   static func writeToken(_ token: String) throws {
     let t = token.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !t.isEmpty else { throw err("empty token") }
-    guard !t.hasPrefix("sk-ant-") else { throw err("that looks like an API key (sk-ant-…); Anvil needs the subscription OAuth token from `claude setup-token`, not an API key (arch §3).") }
+    // Reject only a METERED API key (sk-ant-api…). Subscription OAuth tokens from `claude setup-token`
+    // are sk-ant-oat… — those are exactly what we want, so don't reject the whole sk-ant- family (§3).
+    guard !t.hasPrefix("sk-ant-api") else { throw err("that's a metered API key (sk-ant-api…); Anvil needs the subscription OAuth token from `claude setup-token` (sk-ant-oat…), not an API key (arch §3).") }
     let dir = (Paths.configEnv as NSString).deletingLastPathComponent
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     let body = "CLAUDE_CODE_OAUTH_TOKEN=\(t)\n"

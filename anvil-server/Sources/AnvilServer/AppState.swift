@@ -27,7 +27,7 @@ final class AppState: ObservableObject {
   /// Persist the token and (re)start the daemon. Used by both pairing routes; nonisolated by design.
   nonisolated static func acceptFleetToken(_ token: String) -> Pairing.PairReply {
     do { try Auth.writeToken(token) } catch {
-      return Pairing.PairReply(ok: false, serverId: nil, serverName: nil, error: "could not save token")
+      return Pairing.PairReply(ok: false, serverId: nil, serverName: nil, error: "could not save token — \(error.localizedDescription)")
     }
     Daemon.service(.install) { _ in }
     DispatchQueue.global().async { Tailscale.serve(externalPort: Paths.port, localPort: Paths.port) }
