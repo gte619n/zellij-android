@@ -55,7 +55,7 @@ import { WorkUnitStore, type WorkUnit } from "../integrations/workunit";
 import { TodoistClient, type TodoistTask } from "../integrations/todoist";
 import { readStatus, withStatus } from "../integrations/status";
 import { claudeAuthStatus, clearClaudeToken, setClaudeToken } from "../auth/store";
-import { planAndTagProject, planAndTagTasks, planDeepLink, planUnit, refinePlanQuery } from "../integrations/autopilot";
+import { planAndTagProject, planAndTagTasks, planUnit, refinePlanQuery } from "../integrations/autopilot";
 import { AutopilotScheduleStore, isRunDue, nextScheduledFire } from "../integrations/schedule";
 import { AttachmentStore } from "../attach/store";
 import { FileNotFound, listDir, locateInside, readFile, resolveInside } from "../fs/session-fs";
@@ -80,9 +80,6 @@ export interface SupervisorConfig {
   warnFraction?: number;
   softStopFraction?: number;
   renderer?: MarkdownRenderer;
-  /** This daemon's reachable web URL (e.g. http://100.x.y.z:7701), used to deep-link plans in
-   *  Todoist comments. Undefined → comments fall back to a plain "open Autopilot" pointer. */
-  webBaseUrl?: string;
 }
 
 /**
@@ -128,12 +125,10 @@ export class Supervisor {
   private readonly attachStore: AttachmentStore;
   readonly webpush: WebPush;
   readonly fcm: Fcm;
-  private readonly webBaseUrl?: string;
   private readonly clonesDir: string;
 
   constructor(cfg: SupervisorConfig, private readonly registry: ConnectionRegistry) {
     this.renderer = cfg.renderer ?? new PassthroughRenderer();
-    this.webBaseUrl = cfg.webBaseUrl;
     this.clonesDir = cfg.clonesDir ?? join(cfg.stateDir, "repos");
     this.store = new SessionStore(cfg.stateDir);
     this.envStore = new EnvironmentStore(cfg.stateDir);
@@ -424,11 +419,7 @@ export class Supervisor {
       ...(revised.summary ? { summary: revised.summary } : {}),
       ...(revised.effort ? { effort: revised.effort } : {}),
     });
-    const refineLink = planDeepLink(this.webBaseUrl, u.id);
-    void this.postPlanComment(
-      u,
-      `🤖 **anvil** refined the plan for “${u.title}”.\n\n${revised.summary?.trim() || "Plan updated."}\n\n_Feedback: ${feedback.trim()}_\n\n${refineLink ? `🔗 Read the full plan in Anvil: ${refineLink}` : "_Read the full plan in Anvil → Autopilot._"}`,
-    );
+    void this.postPlanComment(u, `🤖 **anvil** refined the plan for “${u.title}”.\n\n${revised.summary?.trim() || "Plan updated."}`);
     this.broadcastAutopilotPlans();
     return { v: PROTOCOL_VERSION, type: "autopilot.plan", ts: now(), ...(cid ? { cid } : {}), plan: this.autopilotPlanInfo(updated ?? u) };
   }
@@ -466,10 +457,9 @@ export class Supervisor {
       ...(planned.summary ? { summary: planned.summary } : {}),
       ...(planned.effort ? { effort: planned.effort } : {}),
     });
-    const reassignLink = planDeepLink(this.webBaseUrl, u.id);
     void this.postPlanComment(
       u,
-      `🤖 **anvil** re-evaluated “${u.title}” against **${env.name}**.\n\n${planned.summary?.trim() || "Plan updated."}\n\n${reassignLink ? `🔗 Read the full plan in Anvil: ${reassignLink}` : "_Read the full plan in Anvil → Autopilot._"}`,
+      `🤖 **anvil** re-evaluated “${u.title}” against **${env.name}**.\n\n${planned.summary?.trim() || "Plan updated."}`,
     );
     this.broadcastAutopilotPlans();
     return { v: PROTOCOL_VERSION, type: "autopilot.plan", ts: now(), ...(cid ? { cid } : {}), plan: this.autopilotPlanInfo(updated ?? u) };
@@ -520,17 +510,14 @@ export class Supervisor {
   }
 
   // ── Autopilot maintenance (Todoist-settings buttons) ──────────────────────────────
-  /** Remove every anvil:* status label from the given units' member tasks (best-effort), keeping the
-   *  user's own labels — including the "Autopilot" sourcing label — intact. Returns how many tasks
-   *  actually had a label removed. */
-  private async stripAnvilLabels(units: WorkUnit[]): Promise<number> {
+  /** Remove the anvil:* status label from each given task (best-effort), keeping the user's own labels —
+   *  including the "Autopilot" sourcing label — intact. Returns how many tasks actually had one removed. */
+  private async stripAnvilLabels(taskIds: Iterable<string>): Promise<number> {
     const state = this.integrations.todoist();
     if (!state?.accessToken) return 0;
     const client = new TodoistClient(state.accessToken);
-    const taskIds = new Set<string>();
-    for (const u of units) for (const id of u.taskIds) taskIds.add(id);
     let cleared = 0;
-    for (const taskId of taskIds) {
+    for (const taskId of new Set(taskIds)) {
       try {
         const t = await client.getTask(taskId);
         if (!readStatus(t.labels)) continue; // no anvil:* label → nothing to strip
@@ -543,12 +530,46 @@ export class Supervisor {
     return cleared;
   }
 
+  /** Every Todoist task currently carrying an anvil:* status label, swept straight from Todoist across
+   *  all linked project boards and the Autopilot sourcing label. This sees labels orphaned from a work
+   *  unit that no longer exists (e.g. a wiped/lost store) — which the known-units list cannot — so Reset
+   *  can clear them and let the task be re-planned. Best-effort: returns whatever it managed to gather. */
+  private async taggedTaskIds(): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const state = this.integrations.todoist();
+    if (!state?.accessToken) return ids;
+    const client = new TodoistClient(state.accessToken);
+    const label = this.autopilotSchedule.get().label;
+    try {
+      const swept: TodoistTask[] = [];
+      for (const env of this.envStore.list()) {
+        if (env.todoistProjectId) swept.push(...(await client.tasks(env.todoistProjectId)));
+      }
+      if (label) swept.push(...(await client.tasksByLabel(label)));
+      for (const t of swept) if (readStatus(t.labels)) ids.add(t.id);
+    } catch {
+      /* best-effort sweep — fall back to whatever was gathered */
+    }
+    return ids;
+  }
+
   /** Reset the pipeline so tasks can be re-planned: strip anvil:* labels and drop the work units that
    *  aren't tied to a live session (in-progress builds are left alone). The "Autopilot" sourcing label
-   *  is preserved, so the next run picks the tasks straight back up. */
+   *  is preserved, so the next run picks the tasks straight back up. Sweeps Todoist directly for tagged
+   *  tasks too, so labels orphaned by a lost work unit don't block a re-plan forever. */
   async resetAnvilTags(cid?: string): Promise<AutopilotMaintenanceResultEvent> {
-    const resettable = this.workUnits.list().filter((u) => !(u.sessionId && this.sessions.has(u.sessionId)));
-    const tasksCleared = await this.stripAnvilLabels(resettable);
+    const all = this.workUnits.list();
+    const isLive = (u: WorkUnit) => !!u.sessionId && this.sessions.has(u.sessionId);
+    const resettable = all.filter((u) => !isLive(u));
+    // Tasks owned by a live build session keep their labels — the running session depends on them.
+    const protectedIds = new Set<string>();
+    for (const u of all) if (isLive(u)) for (const id of u.taskIds) protectedIds.add(id);
+    // Clear every anvil-tagged task: the resettable units' members PLUS any orphaned by a lost unit
+    // (swept straight from Todoist), minus the protected live-session ones.
+    const toClear = await this.taggedTaskIds();
+    for (const u of resettable) for (const id of u.taskIds) toClear.add(id);
+    for (const id of protectedIds) toClear.delete(id);
+    const tasksCleared = await this.stripAnvilLabels(toClear);
     for (const u of resettable) this.workUnits.remove(u.id);
     this.broadcastAutopilotPlans();
     return { v: PROTOCOL_VERSION, type: "autopilot.maintenance.result", ts: now(), ...(cid ? { cid } : {}), op: "reset", tasksCleared, unitsRemoved: resettable.length };
@@ -558,7 +579,9 @@ export class Supervisor {
    *  units (the pending grid empties). Running sessions are not killed, but their unit is forgotten. */
   async clearAutopilot(cid?: string): Promise<AutopilotMaintenanceResultEvent> {
     const units = this.workUnits.list();
-    const tasksCleared = await this.stripAnvilLabels(units);
+    const taskIds = new Set<string>();
+    for (const u of units) for (const id of u.taskIds) taskIds.add(id);
+    const tasksCleared = await this.stripAnvilLabels(taskIds);
     for (const u of units) this.workUnits.remove(u.id);
     this.broadcastAutopilotPlans();
     return { v: PROTOCOL_VERSION, type: "autopilot.maintenance.result", ts: now(), ...(cid ? { cid } : {}), op: "clear", tasksCleared, unitsRemoved: units.length };
@@ -652,7 +675,6 @@ export class Supervisor {
           projectId: env.todoistProjectId!,
           repoRoot: env.repoRoot,
           repoName: env.name,
-          ...(this.webBaseUrl ? { webBaseUrl: this.webBaseUrl } : {}),
           onProgress: emit,
         });
         createdUnits.push(...res.created);
@@ -673,7 +695,6 @@ export class Supervisor {
           repoRoot: defaultEnv.repoRoot,
           repoName: defaultEnv.name,
           tasks: external,
-          ...(this.webBaseUrl ? { webBaseUrl: this.webBaseUrl } : {}),
           onProgress: emit,
         });
         createdUnits.push(...res.created);
