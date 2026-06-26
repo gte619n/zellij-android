@@ -219,18 +219,12 @@ function candidateTasks(tasks: TodoistTask[], workUnits: WorkUnitStore): Todoist
   return tasks.filter((t) => !readStatus(t.labels) && !workUnits.forTask(t.id));
 }
 
-/** The Todoist comment for a freshly planned unit: a short summary, not the whole plan — the full
- *  plan lives in Anvil's Autopilot view, where it can be read and refined. `planUrl` (when known) is
- *  a deep link straight to this plan's reader. */
-function planComment(unit: PlannedUnit, planUrl?: string): string {
+/** The Todoist comment for a freshly planned unit: just a one-line summary of what's ready. The full
+ *  plan and its location live in Anvil's Autopilot view — no need to restate them (or editorialize)
+ *  in the comment. */
+function planComment(unit: PlannedUnit): string {
   const summary = unit.summary?.trim() || unit.rationale.trim() || "Implementation plan ready.";
-  const review = planUrl ? `🔗 Review & refine in Anvil: ${planUrl}` : "_Review & refine the full plan in Anvil → Autopilot._";
-  return `🤖 **anvil** planned “${unit.title}”.\n\n${summary}\n\n${review}`;
-}
-
-/** Deep link to a plan's reader in the Anvil web UI, or undefined when the daemon's URL is unknown. */
-export function planDeepLink(webBaseUrl: string | undefined, workUnitId: string): string | undefined {
-  return webBaseUrl ? `${webBaseUrl.replace(/\/$/, "")}/#p/${workUnitId}` : undefined;
+  return `🤖 **anvil** planned “${unit.title}”.\n\n${summary}`;
 }
 
 /**
@@ -247,7 +241,6 @@ export async function planAndTagProject(
     repoName?: string;
     bundleModel?: Model;
     planModel?: Model;
-    webBaseUrl?: string; // for the Todoist comment's "review in Anvil" deep link
     onProgress?: (msg: string) => void;
   },
 ): Promise<{ created: WorkUnit[]; skipped: number }> {
@@ -278,7 +271,7 @@ export async function planAndTagProject(
     // Tag every member; post the summary + deep link once (on the first member), pointers on the rest.
     for (const [j, t] of planned.tasks.entries()) {
       await deps.client.setTaskLabels(t.id, withStatus(t.labels, "planned"));
-      if (j === 0) await deps.client.addComment(t.id, planComment(planned, planDeepLink(opts.webBaseUrl, wu.id)));
+      if (j === 0) await deps.client.addComment(t.id, planComment(planned));
       else await deps.client.addComment(t.id, `🤖 Part of anvil unit “${planned.title}” — plan is on “${planned.tasks[0]!.content}”.`);
     }
     created.push(wu);
@@ -302,7 +295,6 @@ export async function planAndTagTasks(
     tasks: TodoistTask[];
     bundleModel?: Model;
     planModel?: Model;
-    webBaseUrl?: string; // for the Todoist comment's "review in Anvil" deep link
     onProgress?: (msg: string) => void;
   },
 ): Promise<{ created: WorkUnit[]; skipped: number }> {
@@ -332,7 +324,7 @@ export async function planAndTagTasks(
     });
     for (const [j, t] of planned.tasks.entries()) {
       await deps.client.setTaskLabels(t.id, withStatus(t.labels, "planned"));
-      if (j === 0) await deps.client.addComment(t.id, planComment(planned, planDeepLink(opts.webBaseUrl, wu.id)));
+      if (j === 0) await deps.client.addComment(t.id, planComment(planned));
       else await deps.client.addComment(t.id, `🤖 Part of anvil unit “${planned.title}” — plan is on “${planned.tasks[0]!.content}”.`);
     }
     created.push(wu);
