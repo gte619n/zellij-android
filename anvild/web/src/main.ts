@@ -1,10 +1,10 @@
 import MarkdownIt from "markdown-it";
 import Sortable from "sortablejs";
-import TomSelect from "tom-select";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { AnvilSocket } from "./ws";
 import { apiFetch, daemonBase } from "./api";
+import { $, byEnvName, clampN, destroyModalSelects, enhanceSelect, envIcon, esc, icon, refreshSelect, sessIcon, slugify } from "./dom";
 
 const strToB64 = (s: string): string => {
   const bytes = new TextEncoder().encode(s);
@@ -46,48 +46,9 @@ import { PALETTE, envOrdinal, sessionBg, stripeColor } from "./sessionColor";
 // App version, replaced at build time (native: the APK versionName; PWA: package.json version).
 declare const __APP_VERSION__: string;
 
-// ── DOM helpers ──────────────────────────────────────────────────────────────
-const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => document.querySelector(sel) as T;
-const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
-const slugify = (s: string): string =>
-  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-const icon = (name: string): string => `<span class="msym">${name}</span>`;
-
 // Show the build version next to the brand so it's obvious which app/bundle is running.
 $("#brand-version").textContent = `v${__APP_VERSION__}`;
-const sessIcon = (s: Session): string =>
-  s.isDefault ? "robot_2" : s.pending ? "schedule" : s.icon ?? (s.source === "fresh-worktree" ? "account_tree" : "folder");
-// An environment's display glyph: its chosen Material Symbol, else a sensible default by repo kind.
-const envIcon = (e: Environment): string => e.icon || (e.isRepo ? "account_tree" : "folder");
-// Case-insensitive name sort for environment lists (selector + settings, per server).
-const byEnvName = (a: Environment, b: Environment): number => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
-// ── Stylized selectors (Tom Select) ──────────────────────────────────────────
-// Native <select>s are upgraded to themed Tom Select dropdowns so options can carry a Material
-// Symbol icon and a color dot. Each <option> may set data-icon / data-color; the render below
-// picks them up (Tom Select copies an option's data-* attributes onto its option data). All our
-// selects live inside modals, so instances are tracked and torn down when the modal closes.
-let modalTomSelects: TomSelect[] = [];
-const renderTomOption = (data: { [k: string]: unknown }, escape: (s: string) => string): string => {
-  const ic = data.icon ? `<span class="msym ts-ic">${escape(String(data.icon))}</span>` : "";
-  const dot = data.color ? `<span class="ts-dot" style="background:${escape(String(data.color))}"></span>` : "";
-  return `<div class="ts-opt">${ic}${dot}<span class="ts-lbl">${escape(String(data.text ?? ""))}</span></div>`;
-};
-/** Upgrade a native <select> into a stylized Tom Select. `search` shows the filter box (long lists). */
-function enhanceSelect(sel: HTMLSelectElement | null, search = false): void {
-  if (!sel) return;
-  const base = { maxOptions: null, hideSelected: false, render: { option: renderTomOption, item: renderTomOption } };
-  modalTomSelects.push(new TomSelect(sel, search ? base : { ...base, controlInput: null }));
-}
-/** Re-read options/value from the underlying <select> after it's been repopulated programmatically. */
-function refreshSelect(sel: HTMLSelectElement | null): void {
-  if (sel) modalTomSelects.find((t) => t.input === sel)?.sync();
-}
-/** Tear down every modal Tom Select (removes its global listeners) — called when a modal closes. */
-function destroyModalSelects(): void {
-  for (const t of modalTomSelects) t.destroy();
-  modalTomSelects = [];
-}
 const conversation = $("#conversation");
 // Scroll lock: only auto-follow new content when the user is already at the bottom.
 let stickToBottom = true;
@@ -578,7 +539,6 @@ $("#sidebar-collapse").addEventListener("click", toggleSidebar);
 // Each pane's width is a CSS variable on :root, persisted per device. A thin handle straddling the
 // pane's border drives it via pointer events (touch-safe, capture so the drag survives leaving the
 // strip). Disabled on narrow screens, where the sidebar overlays and the panel is near full-bleed.
-const clampN = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 function initResizers(): void {
   const root = document.documentElement;
   const stored = (k: string): number => Number(localStorage.getItem(k)) || 0;
