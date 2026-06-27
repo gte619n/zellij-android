@@ -5,6 +5,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { AnvilSocket } from "./ws";
 import { apiFetch, daemonBase } from "./api";
 import { $, byEnvName, clampN, destroyModalSelects, enhanceSelect, envIcon, esc, icon, refreshSelect, sessIcon, slugify } from "./dom";
+import { currentTheme, resolveTheme, themePref, updateThemeControls } from "./theme";
+import type { ThemePref } from "./theme";
 
 const strToB64 = (s: string): string => {
   const bytes = new TextEncoder().encode(s);
@@ -468,21 +470,8 @@ if (activeId) {
 }
 
 // ── Theme (light / dark / system, chosen in Settings → Appearance) ────────────
-type ThemePref = "light" | "dark" | "system";
-/** The user's stored preference; absence (or anything unexpected) means "follow the OS". */
-function themePref(): ThemePref {
-  const s = localStorage.getItem("anvil.theme");
-  return s === "light" || s === "dark" ? s : "system";
-}
-/** The concrete theme currently painted on <html>. */
-function currentTheme(): "light" | "dark" {
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-}
-/** Resolve a preference to a concrete theme, consulting the OS for "system". */
-function resolveTheme(pref: ThemePref): "light" | "dark" {
-  if (pref === "system") return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  return pref;
-}
+// Pure theme resolution lives in theme.ts; the repaint side stays here because it re-renders the
+// session list.
 /** Paint the resolved theme and re-clamp session tints to the new band. */
 function applyTheme(): void {
   document.documentElement.dataset.theme = resolveTheme(themePref());
@@ -495,11 +484,6 @@ function setThemePref(pref: ThemePref): void {
   else localStorage.setItem("anvil.theme", pref);
   applyTheme();
   updateThemeControls();
-}
-/** Mark the active swatch in Settings → Appearance (no-op when Settings isn't open). */
-function updateThemeControls(): void {
-  const pref = themePref();
-  document.querySelectorAll<HTMLElement>(".theme-opt").forEach((b) => b.classList.toggle("active", b.dataset.themePref === pref));
 }
 // Follow the OS theme live while the preference is "system".
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
