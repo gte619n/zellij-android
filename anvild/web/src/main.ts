@@ -4,7 +4,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { AnvilSocket } from "./ws";
 import { apiFetch, daemonBase } from "./api";
-import { $, byEnvName, clampN, destroyModalSelects, enhanceSelect, envIcon, esc, icon, refreshSelect, sessIcon, slugify } from "./dom";
+import { $, byEnvName, destroyModalSelects, enhanceSelect, envIcon, esc, icon, refreshSelect, sessIcon, slugify } from "./dom";
 import { currentTheme, resolveTheme, themePref, updateThemeControls } from "./theme";
 import type { ThemePref } from "./theme";
 import { ui } from "./state";
@@ -20,6 +20,7 @@ import {
   setSessionHash,
 } from "./overlays";
 import { initPush, isAndroidApp, nativeBridge } from "./push";
+import { applySidebar, collapseSidebarForChat, initResizers, isNarrow, toggleSidebar } from "./layout";
 
 const strToB64 = (s: string): string => {
   const bytes = new TextEncoder().encode(s);
@@ -443,104 +444,21 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
   if (themePref() === "system") applyTheme();
 });
 
-// ── Sidebar collapse ─────────────────────────────────────────────────────────────
-// 700px keeps the phone-only layout off the iPad Mini (744px) and the unfolded Galaxy Z Fold
-// (~755px) while still catching every real phone. Must stay in sync with the @media query in app.css.
-const isNarrow = (): boolean => matchMedia("(max-width: 700px)").matches;
-let sidebarCollapsed =
+// ── Sidebar collapse + resizable panes ───────────────────────────────────────────
+// The sidebar/resizer mechanics live in layout.ts; the boot-time seed of ui.sidebarCollapsed and
+// the listener wiring stay here (they read deepLinkedSession/activeId and own page bootstrap).
+ui.sidebarCollapsed =
   localStorage.getItem("anvil.sidebar") === "collapsed" ||
   (localStorage.getItem("anvil.sidebar") === null && isNarrow());
 // Opened via a deep link / notification on a phone: jump straight into the conversation with the
 // session menu hidden, even if the sidebar was last left open. (UI refinement §4)
-if (deepLinkedSession && activeId && isNarrow()) sidebarCollapsed = true;
-function applySidebar(): void {
-  $("#sidebar").classList.toggle("collapsed", sidebarCollapsed);
-}
+if (deepLinkedSession && activeId && isNarrow()) ui.sidebarCollapsed = true;
 applySidebar();
-function toggleSidebar(): void {
-  sidebarCollapsed = !sidebarCollapsed;
-  localStorage.setItem("anvil.sidebar", sidebarCollapsed ? "collapsed" : "open");
-  applySidebar();
-  // On a phone the open sidebar overlays the conversation — make Back close it.
-  if (isNarrow()) {
-    if (!sidebarCollapsed) openOverlay("sidebar", () => { sidebarCollapsed = true; applySidebar(); });
-    else dismissOverlay("sidebar");
-  }
-}
 // both the header ☰ and an in-sidebar button toggle it — the in-sidebar one stays reachable
 // when the open sidebar overlays the header (e.g. unfolding a foldable).
 $("#btn-sidebar").addEventListener("click", toggleSidebar);
 $("#sidebar-collapse").addEventListener("click", toggleSidebar);
-
-// ── Resizable panes (left sidebar + right side panel) ────────────────────────────
-// Each pane's width is a CSS variable on :root, persisted per device. A thin handle straddling the
-// pane's border drives it via pointer events (touch-safe, capture so the drag survives leaving the
-// strip). Disabled on narrow screens, where the sidebar overlays and the panel is near full-bleed.
-function initResizers(): void {
-  const root = document.documentElement;
-  const stored = (k: string): number => Number(localStorage.getItem(k)) || 0;
-  const sw = stored("anvil.sidebarW");
-  if (sw) root.style.setProperty("--sidebar-w", `${sw}px`);
-  const pw = stored("anvil.panelW");
-  if (pw) root.style.setProperty("--panel-w", `${pw}px`);
-
-  const wire = (
-    handle: HTMLElement | null,
-    cfg: { cssVar: string; key: string; min: number; maxFn: () => number; width: (clientX: number) => number },
-  ): void => {
-    if (!handle) return;
-    handle.addEventListener("pointerdown", (e: PointerEvent) => {
-      if (isNarrow()) return; // resizing is desktop-only
-      e.preventDefault();
-      handle.setPointerCapture(e.pointerId);
-      handle.classList.add("dragging");
-      document.body.style.userSelect = "none";
-      document.body.style.cursor = "col-resize";
-      let latest = 0;
-      const move = (ev: PointerEvent): void => {
-        latest = clampN(cfg.width(ev.clientX), cfg.min, cfg.maxFn());
-        root.style.setProperty(cfg.cssVar, `${latest}px`);
-      };
-      const up = (): void => {
-        handle.releasePointerCapture(e.pointerId);
-        handle.classList.remove("dragging");
-        handle.removeEventListener("pointermove", move);
-        handle.removeEventListener("pointerup", up);
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-        if (latest) localStorage.setItem(cfg.key, String(Math.round(latest)));
-      };
-      handle.addEventListener("pointermove", move);
-      handle.addEventListener("pointerup", up);
-    });
-  };
-
-  const sidebar = document.getElementById("sidebar");
-  wire(document.getElementById("sidebar-resizer"), {
-    cssVar: "--sidebar-w",
-    key: "anvil.sidebarW",
-    min: 200,
-    maxFn: () => Math.min(620, window.innerWidth - 360), // always leave the conversation room
-    width: (x) => x - (sidebar?.getBoundingClientRect().left ?? 0), // pointer X minus the sidebar's left edge
-  });
-  const sidePanel = document.getElementById("side-panel");
-  wire(document.getElementById("panel-resizer"), {
-    cssVar: "--panel-w",
-    key: "anvil.panelW",
-    min: 320,
-    maxFn: () => Math.min(window.innerWidth * 0.92, 1000),
-    width: (x) => (sidePanel?.getBoundingClientRect().right ?? window.innerWidth) - x, // panel is pinned right, grows leftward
-  });
-}
 initResizers();
-
-// On a phone there isn't room for both panes, so when focus moves to the chat (a tap or the
-// composer gaining focus) we collapse the overlaid session list — never a half-covered chat.
-function collapseSidebarForChat(): void {
-  if (!isNarrow() || sidebarCollapsed) return;
-  if (overlayOpen("sidebar")) dismissOverlay("sidebar"); // also unwinds the Back-stack entry
-  else { sidebarCollapsed = true; applySidebar(); } // open without an overlay entry (e.g. after a resize)
-}
 $("#convo-col").addEventListener("pointerdown", collapseSidebarForChat);
 $("#convo-col").addEventListener("focusin", collapseSidebarForChat);
 
@@ -3506,8 +3424,8 @@ export function selectSession(id: string, push = true): void {
   // daemon also clears it everywhere when we attach below). (UI refinement §1)
   navigator.serviceWorker?.controller?.postMessage({ type: "close-notifications", sessionId: id });
   sendTo(id, { type: "session.attach", sessionId: id }); // full snapshot (always show history)
-  if (isNarrow() && !sidebarCollapsed) {
-    sidebarCollapsed = true;
+  if (isNarrow() && !ui.sidebarCollapsed) {
+    ui.sidebarCollapsed = true;
     applySidebar(); // on a phone, get out of the way once you've picked a session
   }
   // reset the side panel for the new session's worktree

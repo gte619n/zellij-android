@@ -12,4 +12,7 @@ export const ui = {
   // popstate is swallowed. Written by overlays.dismissOverlay, read/decremented by the popstate
   // handler in main.ts.
   suppressPop: 0,
+  // Whether the session sidebar is collapsed. Owned by layout.ts, but the conversation core also
+  // sets it (selecting a session collapses the sidebar on a phone). Seeded at boot in main.ts.
+  sidebarCollapsed: false,
 };
