@@ -7,6 +7,18 @@ import { apiFetch, daemonBase } from "./api";
 import { $, byEnvName, clampN, destroyModalSelects, enhanceSelect, envIcon, esc, icon, refreshSelect, sessIcon, slugify } from "./dom";
 import { currentTheme, resolveTheme, themePref, updateThemeControls } from "./theme";
 import type { ThemePref } from "./theme";
+import { ui } from "./state";
+import {
+  dismissOverlay,
+  dismissTopOverlay,
+  openOverlay,
+  overlayOpen,
+  overlays,
+  planFromHash,
+  sessionFromHash,
+  sessionHref,
+  setSessionHash,
+} from "./overlays";
 
 const strToB64 = (s: string): string => {
   const bytes = new TextEncoder().encode(s);
@@ -269,68 +281,8 @@ function persistEnvironments(): void {
     /* corrupt cache — start empty, the daemon repopulates on connect */
   }
 })();
-// URL routing: the active session lives in the hash (#s/<id>) so Back/Forward works and a
-// session is deep-linkable / openable in its own tab. A ?session= query (old push links) still works.
-const sessionFromHash = (): string | null => {
-  const m = location.hash.match(/^#s\/(.+)$/);
-  return m ? decodeURIComponent(m[1]!) : null;
-};
-// A plan deep link (#p/<workUnitId>) opens the Autopilot view straight to that plan's reader — the
-// URL the autopilot posts in its Todoist comment. Used on cold load and on warm hashchange.
-const planFromHash = (): string | null => {
-  const m = location.hash.match(/^#p\/(.+)$/);
-  return m ? decodeURIComponent(m[1]!) : null;
-};
-
-// ── Back-stack: device/browser Back dismisses the top UI layer before leaving ─────────
-// Modals/dialogs, the settings view, the side panel and the (mobile) expanded sidebar are
-// all "soft" layers. Each pushes a history entry when it opens, so Back has somewhere to go
-// instead of exiting the app: Android routes the device button through web.goBack(), macOS
-// uses the swipe gesture, the PWA/browser uses its own Back — all surface as `popstate`,
-// which closes the topmost layer. Each entry records how many layers were open (`anvilDepth`)
-// so a single popstate can unwind to exactly the right place.
-type OverlayName = "modal" | "settings" | "autopilot" | "plan" | "sidebar" | "panel" | "reader";
-interface Overlay {
-  name: OverlayName;
-  close: () => void; // pure DOM/state teardown — must NOT touch history itself
-}
-const overlays: Overlay[] = [];
-let suppressPop = 0; // popstates from our own dismissOverlay() unwind — teardown already done
-const overlayOpen = (name: OverlayName): boolean => overlays.some((o) => o.name === name);
-function openOverlay(name: OverlayName, close: () => void, hash?: string): void {
-  if (overlayOpen(name)) return; // already open (e.g. swapping a modal's contents in place)
-  overlays.push({ name, close });
-  // `hash` (e.g. "#autopilot") gives the overlay its own URL so it's a real history entry — Back
-  // reverts the URL and pops the layer. Omit it to keep the current URL (the session hash).
-  const url = hash ? `${location.pathname}${hash}` : undefined;
-  history.pushState({ anvilDepth: overlays.length }, "", url);
-}
-/** Programmatically dismiss `name` and anything stacked above it (Cancel / X / backdrop). Tears
- *  down synchronously, then unwinds our own history entries (the resulting popstate is swallowed
- *  by the guard). Closing layers via the device/browser Back goes through popstate directly. */
-function dismissOverlay(name: OverlayName): void {
-  const idx = overlays.map((o) => o.name).lastIndexOf(name);
-  if (idx < 0) return; // already gone — keeps redundant/double closes harmless
-  const n = overlays.length - idx;
-  for (let i = 0; i < n; i++) overlays.pop()!.close();
-  suppressPop++;
-  history.go(-n); // drop our history entries; the one popstate this fires is suppressed below
-}
-/** Dismiss just the topmost soft layer (used by the Escape key) — same teardown as a single Back. */
-function dismissTopOverlay(): boolean {
-  const top = overlays[overlays.length - 1];
-  if (!top) return false;
-  dismissOverlay(top.name);
-  return true;
-}
-
-const sessionHref = (id: string): string => `${location.pathname}#s/${encodeURIComponent(id)}`;
-function setSessionHash(id: string | null, push: boolean): void {
-  const url = id ? sessionHref(id) : location.pathname;
-  const state = { anvilDepth: overlays.length };
-  if (push) history.pushState(state, "", url);
-  else history.replaceState(state, "", url);
-}
+// URL routing + the soft-layer back-stack (overlays, openOverlay/dismissOverlay, hash helpers) live
+// in overlays.ts; the popstate handler and session navigation that consume them stay here.
 // A session in the URL (#s/… or ?session=) means we were opened via a deep link or a notification
 // tap — as opposed to just restoring the last-active session from storage. On a phone we then jump
 // straight into that conversation with the sidebar hidden (see the collapse below). (UI refinement §4)
@@ -345,8 +297,8 @@ setSessionHash(activeId, false); // canonicalize the URL (also strips any ?sessi
 // jump straight into the session we just made without also hijacking sessions created elsewhere.
 let pendingCreateCid: string | null = null;
 window.addEventListener("popstate", () => {
-  if (suppressPop > 0) {
-    suppressPop--; // our own dismissOverlay() unwind — the layer is already torn down
+  if (ui.suppressPop > 0) {
+    ui.suppressPop--; // our own dismissOverlay() unwind — the layer is already torn down
     return;
   }
   // Device/browser Back: close every layer stacked above the depth we landed on (dialogs/menus/
