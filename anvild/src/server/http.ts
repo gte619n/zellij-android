@@ -29,12 +29,14 @@ const CSP = [
   "img-src 'self' data:",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Shiki/KaTeX/mermaid + Material Symbols (CDN)
   "script-src 'self'",
-  // 'self' = the hub's own daemon; wss:/ws: for its WebSocket; https://*.ts.net + wss://*.ts.net let
-  // the hub web app federate other servers on the tailnet (fleet — anvil-multi-server.md §4.1/§5.1).
   // 'self' = the hub's own daemon; the *.ts.net entries let the hub web app federate other servers on
   // the tailnet. Both http/ws (daemons bound directly to the tailnet IP) and https/wss (behind
   // `tailscale serve`) are allowed (fleet — anvil-multi-server.md §4.1/§5.1).
-  "connect-src 'self' ws: wss: http://*.ts.net ws://*.ts.net https://*.ts.net wss://*.ts.net",
+  // The `:*` port wildcard is REQUIRED: members serve on non-default ports (:7701, :7702), and a CSP
+  // host-source with no port only matches the scheme default (443/80) — so https://*.ts.net would
+  // silently block an upload to https://member:7701/api/…/attachments. WebSockets dodge this via the
+  // bare ws:/wss: scheme-sources (any host/port), which is why text worked but REST uploads didn't.
+  "connect-src 'self' ws: wss: http://*.ts.net:* ws://*.ts.net:* https://*.ts.net:* wss://*.ts.net:*",
   "font-src 'self' https://fonts.gstatic.com", // Material Symbols woff2 from Google's CDN (bundled in native apps)
   "object-src 'none'",
   "base-uri 'none'",
